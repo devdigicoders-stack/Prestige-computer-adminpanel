@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useAuth } from '../../hooks/useAuth'
 
 function UserIcon({ className = 'w-[19px] h-[19px]', strokeWidth = 1.8 }) {
   return (
@@ -94,25 +95,43 @@ function ArrowRightIcon({ className = 'w-[18px] h-[18px]' }) {
 }
 
 export default function Login({ onLoginSuccess }) {
+  const { login } = useAuth()
+
+  // Form states - clean inputs with empty defaults
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(false)
+  const [rememberMe, setRememberMe] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
+
+  // Status & error state
+  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const handleSubmit = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
     if (!email.trim() || !password.trim()) {
       setError('Please enter both Email Address and Password.')
       return
     }
-    setError('')
-    onLoginSuccess?.()
+
+    try {
+      setIsLoading(true)
+      setError('')
+      await login(email.trim(), password, rememberMe)
+      onLoginSuccess?.()
+    } catch (err) {
+      console.error('Login error:', err)
+      setError(
+        err.message || 'Unable to connect to Prestige Computers API. Please check your credentials.'
+      )
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
     <div className="h-[100dvh] w-screen overflow-hidden flex flex-col lg:flex-row bg-[#0b0b0d]">
-      {/* SVG filter: turns black text/outline in logo.png crisp white on dark background while preserving red & white */}
+      {/* SVG filter: turns black text/outline in logo.png crisp white on dark background */}
       <svg
         width="0"
         height="0"
@@ -139,21 +158,21 @@ export default function Login({ onLoginSuccess }) {
       </svg>
 
       {/* LEFT / TOP BRAND VISUAL PANEL */}
-      <section className="relative h-[26vh] min-h-[165px] max-h-[230px] lg:h-full lg:min-h-0 lg:max-h-none lg:w-[54%] shrink-0 bg-[#0b0b0d] overflow-hidden select-none">
-        {/* Background Hardware & Red Wave Image (public/login.png) */}
+      <section className="relative h-[24vh] min-h-[150px] max-h-[220px] lg:h-full lg:min-h-0 lg:max-h-none lg:w-[54%] shrink-0 bg-[#0b0b0d] overflow-hidden select-none">
+        {/* Background Hardware & Red Wave Image */}
         <img
           src="/login.png"
           alt="Prestige Computers Gaming PC, Laptop and Headphones"
           className="absolute inset-0 w-full h-full object-cover object-center pointer-events-none"
         />
 
-        {/* Subtle dark readability vignette on mobile so logo pops cleanly */}
+        {/* Subtle dark readability vignette on mobile */}
         <div className="lg:hidden absolute inset-0 bg-gradient-to-b from-black/55 via-black/45 to-black/75 pointer-events-none" />
 
         {/* Subtle desktop top-center dark depth behind logo */}
         <div className="hidden lg:block absolute inset-x-0 top-0 h-[42%] bg-gradient-to-b from-black/35 via-black/15 to-transparent pointer-events-none" />
 
-        {/* Prestige Computers Logo (public/logo.png) */}
+        {/* Prestige Computers Logo */}
         <div className="relative z-10 h-full lg:h-auto flex items-center justify-center lg:pt-[7vh] xl:pt-[8vh] px-6">
           <img
             src="/logo.png"
@@ -170,9 +189,9 @@ export default function Login({ onLoginSuccess }) {
         <div className="lg:hidden absolute bottom-0 inset-x-0 h-[3px] bg-gradient-to-r from-[#8b0000] via-[#e01212] to-[#8b0000]" />
       </section>
 
-      {/* RIGHT / BOTTOM WHITE LOGIN PANEL */}
-      <section className="flex-1 lg:h-full lg:w-[46%] bg-white flex items-center justify-center px-6 sm:px-10 lg:px-12 xl:px-16 overflow-y-auto lg:overflow-hidden">
-        <div className="w-full max-w-[395px] py-5 sm:py-6">
+      {/* RIGHT / BOTTOM WHITE FORM PANEL */}
+      <section className="flex-1 lg:h-full lg:w-[46%] bg-white flex items-center justify-center px-6 sm:px-10 lg:px-12 xl:px-16 overflow-y-auto">
+        <div className="w-full max-w-[395px] py-6 sm:py-8">
           {/* Red Circular Admin User Badge */}
           <div className="flex justify-center">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-b from-[#e01414] to-[#b50909] text-white flex items-center justify-center shadow-[0_6px_16px_-3px_rgba(204,14,14,0.45)]">
@@ -181,33 +200,34 @@ export default function Login({ onLoginSuccess }) {
           </div>
 
           {/* Heading & Subtitle */}
-          <div className="mt-3.5 sm:mt-4 text-center">
-            <h1 className="text-[21px] sm:text-[25px] font-semibold text-[#111111] tracking-[-0.02em] leading-tight">
+          <div className="mt-3.5 text-center">
+            <h1 className="text-[21px] sm:text-[24px] font-semibold text-[#111111] tracking-[-0.02em] leading-tight">
               Admin Login
             </h1>
-            <p className="mt-1 sm:mt-1.5 text-[12.5px] sm:text-[13.5px] font-medium text-[#555555]">
+            <p className="mt-1 text-[12.5px] sm:text-[13px] font-medium text-[#555555]">
               Sign in to manage Prestige Computers
             </p>
           </div>
 
+          {/* Error Banner */}
+          {error && (
+            <div
+              role="alert"
+              className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12px] sm:text-[12.5px] font-medium text-[#b91c1c] text-center"
+            >
+              {error}
+            </div>
+          )}
+
           {/* Login Form */}
           <form
-            onSubmit={handleSubmit}
-            className="mt-5 sm:mt-7 space-y-3.5 sm:space-y-4"
+            onSubmit={handleLogin}
+            className="mt-5 space-y-4"
             noValidate
           >
-            {error && (
-              <div
-                role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[12px] sm:text-[13px] font-medium text-[#b91c1c] text-center"
-              >
-                {error}
-              </div>
-            )}
-
             {/* Email Address Input */}
             <div>
-              <label htmlFor="admin-email" className="sr-only">
+              <label htmlFor="admin-email" className="block text-[12px] font-medium text-[#374151] mb-1">
                 Email Address
               </label>
               <div className="flex items-center rounded-lg border border-[#d6dae2] bg-[#f7f8fa] transition-all focus-within:border-[#cc0e0e] focus-within:bg-white focus-within:ring-4 focus-within:ring-[#cc0e0e]/10">
@@ -224,15 +244,15 @@ export default function Login({ onLoginSuccess }) {
                     setEmail(e.target.value)
                     if (error) setError('')
                   }}
-                  placeholder="Email Address"
-                  className="w-full bg-transparent px-3 py-3 text-[13px] sm:text-[13.5px] font-normal text-[#111827] placeholder:text-[#6b7280] placeholder:font-normal focus:outline-none"
+                  placeholder="Enter admin email address"
+                  className="w-full bg-transparent px-3 py-2.5 text-[13px] font-normal text-[#111827] placeholder:text-[#9ca3af] focus:outline-none"
                 />
               </div>
             </div>
 
             {/* Password Input */}
             <div>
-              <label htmlFor="admin-password" className="sr-only">
+              <label htmlFor="admin-password" className="block text-[12px] font-medium text-[#374151] mb-1">
                 Password
               </label>
               <div className="flex items-center rounded-lg border border-[#d6dae2] bg-[#f7f8fa] transition-all focus-within:border-[#cc0e0e] focus-within:bg-white focus-within:ring-4 focus-within:ring-[#cc0e0e]/10">
@@ -249,8 +269,8 @@ export default function Login({ onLoginSuccess }) {
                     setPassword(e.target.value)
                     if (error) setError('')
                   }}
-                  placeholder="Password"
-                  className="w-full bg-transparent px-3 py-3 text-[13px] sm:text-[13.5px] font-normal text-[#111827] placeholder:text-[#6b7280] placeholder:font-normal focus:outline-none"
+                  placeholder="Enter password"
+                  className="w-full bg-transparent px-3 py-2.5 text-[13px] font-normal text-[#111827] placeholder:text-[#9ca3af] focus:outline-none"
                 />
                 <button
                   type="button"
@@ -263,8 +283,8 @@ export default function Login({ onLoginSuccess }) {
               </div>
             </div>
 
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between pt-0.5 text-[12.5px] sm:text-[13px]">
+            {/* Remember Me */}
+            <div className="flex items-center justify-between pt-0.5 text-[12.5px]">
               <label className="inline-flex items-center gap-2 text-[#374151] font-medium cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -272,24 +292,27 @@ export default function Login({ onLoginSuccess }) {
                   onChange={(e) => setRememberMe(e.target.checked)}
                   className="w-4 h-4 rounded-[3px] border border-[#6b7280] accent-[#cc0e0e] cursor-pointer"
                 />
-                <span>Remember me</span>
+                <span>Remember me on this device</span>
               </label>
-
-              <button
-                type="button"
-                className="text-[#d31212] hover:text-[#a30b0b] font-medium transition-colors cursor-pointer"
-              >
-                Forgot Password?
-              </button>
             </div>
 
-            {/* Login Button */}
+            {/* Submit Button */}
             <button
               type="submit"
-              className="w-full mt-2 py-3 sm:py-3.5 rounded-lg bg-gradient-to-r from-[#e21414] via-[#c70b0b] to-[#a60707] hover:from-[#ed1717] hover:via-[#d10d0d] hover:to-[#940606] text-white text-[14px] sm:text-[14.5px] font-medium shadow-[0_8px_20px_-5px_rgba(199,11,11,0.65)] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              disabled={isLoading}
+              className="w-full mt-2 py-3 sm:py-3.5 rounded-lg bg-gradient-to-r from-[#e21414] via-[#c70b0b] to-[#a60707] hover:from-[#ed1717] hover:via-[#d10d0d] hover:to-[#940606] text-white text-[13.5px] sm:text-[14px] font-medium shadow-[0_8px_20px_-5px_rgba(199,11,11,0.65)] active:scale-[0.99] disabled:opacity-75 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Login</span>
-              <ArrowRightIcon />
+              {isLoading ? (
+                <>
+                  <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  <span>Signing in...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In to Dashboard</span>
+                  <ArrowRightIcon />
+                </>
+              )}
             </button>
           </form>
         </div>

@@ -1,134 +1,47 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
+import Pagination from '../../components/common/Pagination'
 import {
   ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   CloseIcon,
   CreditCardIcon,
   PlusIcon,
   SearchIcon,
 } from '../../components/common/Icons'
-
-const INITIAL_PAYMENTS = [
-  {
-    id: '#TXN-90482',
-    gatewayRef: 'PAY_LIVE_884219',
-    referenceId: '#PC12845',
-    category: 'Order Payment',
-    customer: 'Aarav Sharma',
-    email: 'aarav.sharma@gmail.com',
-    method: 'Credit Card',
-    methodDetail: 'Visa •••• 4242',
-    amount: 1799.0,
-    date: 'Nov 30, 2026',
-    time: '2:16 PM',
-    status: 'Completed',
-  },
-  {
-    id: '#TXN-90481',
-    gatewayRef: 'PAY_LIVE_884105',
-    referenceId: '#PC12844',
-    category: 'Order Payment',
-    customer: 'Priya Verma',
-    email: 'priya.v@outlook.com',
-    method: 'UPI',
-    methodDetail: 'priya@okaxis',
-    amount: 2598.0,
-    date: 'Nov 30, 2026',
-    time: '11:41 AM',
-    status: 'Completed',
-  },
-  {
-    id: '#TXN-90480',
-    gatewayRef: 'PAY_LIVE_883942',
-    referenceId: '#RT7845',
-    category: 'Rental Fee',
-    customer: 'Neha Kapoor',
-    email: 'neha.kapoor@studio.co',
-    method: 'UPI',
-    methodDetail: 'neha@okhdfc',
-    amount: 199.0,
-    date: 'Nov 29, 2026',
-    time: '3:21 PM',
-    status: 'Completed',
-  },
-  {
-    id: '#TXN-90479',
-    gatewayRef: 'PAY_LIVE_883941',
-    referenceId: '#RT7845',
-    category: 'Security Deposit',
-    customer: 'Neha Kapoor',
-    email: 'neha.kapoor@studio.co',
-    method: 'Credit Card',
-    methodDetail: 'Mastercard •••• 8810',
-    amount: 300.0,
-    date: 'Nov 29, 2026',
-    time: '3:21 PM',
-    status: 'Completed',
-  },
-  {
-    id: '#TXN-90478',
-    gatewayRef: 'POS_COD_10482',
-    referenceId: '#PC12841',
-    category: 'Order Payment',
-    customer: 'Vikram Singh',
-    email: 'vikram.s@gmail.com',
-    method: 'Cash / POS',
-    methodDetail: 'Cash on Delivery',
-    amount: 1199.0,
-    date: 'Nov 28, 2026',
-    time: '5:50 PM',
-    status: 'Pending',
-  },
-  {
-    id: '#TXN-90477',
-    gatewayRef: 'PAY_LIVE_883120',
-    referenceId: '#PC12840',
-    category: 'Order Payment',
-    customer: 'Ananya Iyer',
-    email: 'ananya.iyer@design.io',
-    method: 'Credit Card',
-    methodDetail: 'Visa •••• 1934',
-    amount: 2499.0,
-    date: 'Nov 28, 2026',
-    time: '1:15 PM',
-    status: 'Refunded',
-  },
-]
+import { paymentService } from '../../services/paymentService'
 
 const STATUS_TABS = ['All', 'Completed', 'Pending', 'Failed', 'Refunded']
 const METHOD_FILTERS = [
   'All Methods',
-  'Credit Card',
   'UPI',
+  'Credit Card',
+  'Debit Card',
   'NetBanking',
   'Cash / POS',
+  'EMI',
+  'Wallets',
 ]
 const CATEGORY_FILTERS = [
   'All Types',
   'Order Payment',
   'Rental Fee',
   'Security Deposit',
+  'Custom Hardware',
+  'Service Fee',
 ]
-const PAGES = [1, 2, 3, 4, 5]
-const TOTAL_TXNS_BASE = 894
-const BASE_REVENUE = 178320
+const ITEMS_PER_PAGE = 8
 
 function formatMoney(amount) {
-  return `$${Number(amount).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
+  return `₹${Number(amount || 0).toLocaleString('en-IN')}`
 }
 
-function getInitials(name) {
+function getInitials(name = '') {
   return name
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0].toUpperCase())
-    .join('')
+    .join('') || 'CU'
 }
 
 function ReceiptIcon({ className = 'w-4 h-4' }) {
@@ -248,6 +161,8 @@ function CategoryPill({ category }) {
     'Order Payment': 'bg-[#fef2f2] text-[#dc1414]',
     'Rental Fee': 'bg-[#eff6ff] text-[#1d4ed8]',
     'Security Deposit': 'bg-[#f3f4f6] text-[#374151]',
+    'Custom Hardware': 'bg-[#faf5ff] text-[#7e22ce]',
+    'Service Fee': 'bg-[#ecfdf5] text-[#047857]',
   }
   return (
     <span
@@ -261,14 +176,13 @@ function CategoryPill({ category }) {
   )
 }
 
-function PaymentReceiptModal({ payment, onClose, onUpdateStatus }) {
+function PaymentReceiptModal({ payment, onClose, onUpdateStatus, isUpdating }) {
   const [status, setStatus] = useState(payment?.status || 'Completed')
 
   if (!payment) return null
 
   const handleSave = () => {
-    onUpdateStatus(payment.id, status)
-    onClose()
+    onUpdateStatus(payment.id || payment._id, status)
   }
 
   return (
@@ -326,6 +240,14 @@ function PaymentReceiptModal({ payment, onClose, onUpdateStatus }) {
                 {payment.email}
               </span>
             </div>
+            {payment.phone && (
+              <div className="px-4 py-2.5 flex items-center justify-between gap-2">
+                <span className="text-[#6b7280] font-normal">Phone</span>
+                <span className="font-medium text-[#374151]">
+                  {payment.phone}
+                </span>
+              </div>
+            )}
             <div className="px-4 py-2.5 flex items-center justify-between gap-2">
               <span className="text-[#6b7280] font-normal">Reference ID</span>
               <span className="font-medium text-[#dc1414]">
@@ -364,11 +286,9 @@ function PaymentReceiptModal({ payment, onClose, onUpdateStatus }) {
           {payment.status === 'Pending' && (
             <button
               type="button"
-              onClick={() => {
-                onUpdateStatus(payment.id, 'Completed')
-                onClose()
-              }}
-              className="px-3.5 py-2 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-[#15803d] text-[13px] font-medium cursor-pointer"
+              disabled={isUpdating}
+              onClick={() => onUpdateStatus(payment.id || payment._id, 'Completed')}
+              className="px-3.5 py-2 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-[#15803d] text-[13px] font-medium cursor-pointer disabled:opacity-60"
             >
               Mark Completed
             </button>
@@ -376,11 +296,9 @@ function PaymentReceiptModal({ payment, onClose, onUpdateStatus }) {
           {payment.status === 'Completed' && (
             <button
               type="button"
-              onClick={() => {
-                onUpdateStatus(payment.id, 'Refunded')
-                onClose()
-              }}
-              className="px-3.5 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-[#b91c1c] text-[13px] font-medium cursor-pointer"
+              disabled={isUpdating}
+              onClick={() => onUpdateStatus(payment.id || payment._id, 'Refunded')}
+              className="px-3.5 py-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-[#b91c1c] text-[13px] font-medium cursor-pointer disabled:opacity-60"
             >
               Issue Refund
             </button>
@@ -396,10 +314,11 @@ function PaymentReceiptModal({ payment, onClose, onUpdateStatus }) {
             </button>
             <button
               type="button"
+              disabled={isUpdating}
               onClick={handleSave}
-              className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs cursor-pointer"
+              className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs cursor-pointer disabled:opacity-60 flex items-center gap-2"
             >
-              Save Status
+              {isUpdating ? 'Saving...' : 'Save Status'}
             </button>
           </div>
         </div>
@@ -408,53 +327,57 @@ function PaymentReceiptModal({ payment, onClose, onUpdateStatus }) {
   )
 }
 
-function RecordPaymentModal({ isOpen, onClose, onRecord }) {
-  const [customer, setCustomer] = useState('')
-  const [referenceId, setReferenceId] = useState('#PC12846')
+function RecordPaymentModal({ isOpen, onClose, onRecord, isRecording }) {
+  const [customerName, setCustomerName] = useState('')
+  const [customerEmail, setCustomerEmail] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+  const [referenceId, setReferenceId] = useState('')
   const [category, setCategory] = useState('Order Payment')
   const [method, setMethod] = useState('UPI')
   const [amount, setAmount] = useState('')
   const [status, setStatus] = useState('Completed')
+  const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
 
   if (!isOpen) return null
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (!customer.trim()) {
+    if (!customerName.trim()) {
       setError('Please enter customer name.')
       return
     }
     const parsedAmount = Number.parseFloat(amount)
     if (Number.isNaN(parsedAmount) || parsedAmount <= 0) {
-      setError('Please enter a valid payment amount.')
+      setError('Please enter a valid positive payment amount.')
       return
     }
 
     onRecord({
-      id: `#TXN-${Math.floor(90483 + Math.random() * 500)}`,
-      gatewayRef: `POS_MAN_${Math.floor(100000 + Math.random() * 899999)}`,
-      referenceId: referenceId.trim() || '#PC12846',
+      customerName: customerName.trim(),
+      customerEmail: customerEmail.trim(),
+      customerPhone: customerPhone.trim(),
+      referenceId: referenceId.trim() || `#PC${Math.floor(10000 + Math.random() * 90000)}`,
       category,
-      customer: customer.trim(),
-      email: `${customer.trim().toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
       method,
-      methodDetail:
-        method === 'Cash / POS' ? 'In-Store Counter' : `${method} Verified`,
       amount: parsedAmount,
-      date: 'Nov 30, 2026',
-      time: 'Just now',
       status,
+      notes: notes.trim(),
     })
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[1px] p-4">
-      <div className="w-full max-w-[480px] rounded-xl bg-white border border-[#e5e7eb] shadow-[0_20px_50px_rgba(16,24,40,0.22)] overflow-hidden">
+      <div className="w-full max-w-[500px] rounded-xl bg-white border border-[#e5e7eb] shadow-[0_20px_50px_rgba(16,24,40,0.22)] overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#eef0f4]">
-          <h3 className="text-[15px] font-semibold text-[#111827]">
-            Record Payment
-          </h3>
+          <div>
+            <h3 className="text-[15px] font-semibold text-[#111827]">
+              Record Payment
+            </h3>
+            <p className="text-[12px] font-normal text-[#6b7280] mt-0.5">
+              Manually log an in-store counter, UPI, or offline transaction.
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -467,43 +390,70 @@ function RecordPaymentModal({ isOpen, onClose, onRecord }) {
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[13px] font-medium text-[#b91c1c]">
+            <div className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-xs text-[#b91c1c] font-medium">
               {error}
             </div>
           )}
 
+          <div>
+            <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
+              Customer Name <span className="text-[#dc1414]">*</span>
+            </label>
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => {
+                setCustomerName(e.target.value)
+                if (error) setError('')
+              }}
+              placeholder="e.g. Rahul Sharma"
+              className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+              required
+            />
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-                Customer Name
+                Email Address
               </label>
               <input
-                type="text"
-                value={customer}
-                onChange={(e) => {
-                  setCustomer(e.target.value)
-                  if (error) setError('')
-                }}
-                placeholder="e.g. Aarav Sharma"
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+                type="email"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                placeholder="customer@gmail.com"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               />
             </div>
 
             <div>
               <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-                Order / Rental Ref
+                Phone Number
               </label>
               <input
                 type="text"
-                value={referenceId}
-                onChange={(e) => setReferenceId(e.target.value)}
-                placeholder="#PC12846"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder="+91 98765 43210"
                 className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            <div>
+              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
+                Reference ID / Order #
+              </label>
+              <input
+                type="text"
+                value={referenceId}
+                onChange={(e) => setReferenceId(e.target.value)}
+                placeholder="e.g. PCS-2026-42492"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] uppercase focus:border-[#dc1414] focus:bg-white focus:outline-none"
+              />
+            </div>
+
             <div>
               <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
                 Category
@@ -520,10 +470,12 @@ function RecordPaymentModal({ isOpen, onClose, onRecord }) {
                 ))}
               </select>
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div>
               <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-                Payment Method
+                Method
               </label>
               <select
                 value={method}
@@ -537,12 +489,10 @@ function RecordPaymentModal({ isOpen, onClose, onRecord }) {
                 ))}
               </select>
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3.5">
             <div>
               <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-                Amount ($)
+                Amount (₹) <span className="text-[#dc1414]">*</span>
               </label>
               <input
                 type="number"
@@ -553,8 +503,9 @@ function RecordPaymentModal({ isOpen, onClose, onRecord }) {
                   setAmount(e.target.value)
                   if (error) setError('')
                 }}
-                placeholder="1299.00"
+                placeholder="52999"
                 className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+                required
               />
             </div>
 
@@ -573,6 +524,19 @@ function RecordPaymentModal({ isOpen, onClose, onRecord }) {
             </div>
           </div>
 
+          <div>
+            <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
+              Notes (Optional)
+            </label>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Paid via store POS counter terminal #1"
+              className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+            />
+          </div>
+
           <div className="flex items-center justify-end gap-2.5 pt-2">
             <button
               type="button"
@@ -583,9 +547,10 @@ function RecordPaymentModal({ isOpen, onClose, onRecord }) {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs cursor-pointer"
+              disabled={isRecording}
+              className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs cursor-pointer disabled:opacity-60 flex items-center gap-2"
             >
-              Record Payment
+              {isRecording ? 'Recording...' : 'Record Payment'}
             </button>
           </div>
         </form>
@@ -595,16 +560,82 @@ function RecordPaymentModal({ isOpen, onClose, onRecord }) {
 }
 
 export default function Payments({ globalSearch = '' }) {
-  const [payments, setPayments] = useState(INITIAL_PAYMENTS)
+  const [payments, setPayments] = useState([])
+  const [kpisData, setKpisData] = useState({
+    totalRevenue: 0,
+    completedCount: 0,
+    pendingAmount: 0,
+    refundedAmount: 0,
+  })
+  const [statusCounts, setStatusCounts] = useState({
+    All: 0,
+    Completed: 0,
+    Pending: 0,
+    Failed: 0,
+    Refunded: 0,
+  })
+  const [loading, setLoading] = useState(true)
+  const [errorMsg, setErrorMsg] = useState('')
   const [localSearch, setLocalSearch] = useState('')
   const [activeTab, setActiveTab] = useState('All')
   const [methodFilter, setMethodFilter] = useState('All Methods')
   const [categoryFilter, setCategoryFilter] = useState('All Types')
-  const [selectedIds, setSelectedIds] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
   const [viewingPayment, setViewingPayment] = useState(null)
   const [recordOpen, setRecordOpen] = useState(false)
   const [confirmState, setConfirmState] = useState(null)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+
+  // Fetch payments from backend
+  const loadPayments = useCallback(async () => {
+    try {
+      const res = await paymentService.getAll({
+        status: activeTab !== 'All' ? activeTab : undefined,
+        method: methodFilter !== 'All Methods' ? methodFilter : undefined,
+        category: categoryFilter !== 'All Types' ? categoryFilter : undefined,
+      })
+      if (res?.data) {
+        setPayments(res.data.payments || [])
+        if (res.data.kpis) setKpisData(res.data.kpis)
+        if (res.data.statusCounts) setStatusCounts(res.data.statusCounts)
+      }
+    } catch (err) {
+      console.error('Failed to load payments:', err)
+      setErrorMsg(err.message || 'Failed to load payments')
+    } finally {
+      setLoading(false)
+    }
+  }, [activeTab, methodFilter, categoryFilter])
+
+  useEffect(() => {
+    let ignore = false
+    paymentService
+      .getAll({
+        status: activeTab !== 'All' ? activeTab : undefined,
+        method: methodFilter !== 'All Methods' ? methodFilter : undefined,
+        category: categoryFilter !== 'All Types' ? categoryFilter : undefined,
+      })
+      .then((res) => {
+        if (ignore) return
+        if (res?.data) {
+          setPayments(res.data.payments || [])
+          if (res.data.kpis) setKpisData(res.data.kpis)
+          if (res.data.statusCounts) setStatusCounts(res.data.statusCounts)
+        }
+      })
+      .catch((err) => {
+        if (ignore) return
+        setErrorMsg(err.message || 'Failed to load payments')
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false)
+      })
+
+    return () => {
+      ignore = true
+    }
+  }, [activeTab, methodFilter, categoryFilter])
 
   const combinedSearch = (localSearch || globalSearch).trim().toLowerCase()
 
@@ -612,10 +643,10 @@ export default function Payments({ globalSearch = '' }) {
     return payments.filter((item) => {
       const matchesSearch =
         !combinedSearch ||
-        item.id.toLowerCase().includes(combinedSearch) ||
-        item.referenceId.toLowerCase().includes(combinedSearch) ||
-        item.customer.toLowerCase().includes(combinedSearch) ||
-        item.gatewayRef.toLowerCase().includes(combinedSearch)
+        (item.id && item.id.toLowerCase().includes(combinedSearch)) ||
+        (item.referenceId && item.referenceId.toLowerCase().includes(combinedSearch)) ||
+        (item.customer && item.customer.toLowerCase().includes(combinedSearch)) ||
+        (item.gatewayRef && item.gatewayRef.toLowerCase().includes(combinedSearch))
 
       const matchesTab = activeTab === 'All' || item.status === activeTab
       const matchesMethod =
@@ -627,77 +658,50 @@ export default function Payments({ globalSearch = '' }) {
     })
   }, [payments, combinedSearch, activeTab, methodFilter, categoryFilter])
 
-  const kpis = useMemo(() => {
-    const initialCompletedSum = INITIAL_PAYMENTS.filter(
-      (p) => p.status === 'Completed',
-    ).reduce((s, p) => s + p.amount, 0)
-    const currentCompletedSum = payments
-      .filter((p) => p.status === 'Completed')
-      .reduce((s, p) => s + p.amount, 0)
-    const completedCount = payments.filter(
-      (p) => p.status === 'Completed',
-    ).length
-    const pendingAmount = payments
-      .filter((p) => p.status === 'Pending')
-      .reduce((s, p) => s + p.amount, 0)
-    const refundedAmount = payments
-      .filter((p) => p.status === 'Refunded')
-      .reduce((s, p) => s + p.amount, 0)
+  const totalPages = Math.max(1, Math.ceil(filteredPayments.length / ITEMS_PER_PAGE))
+  const safePage = Math.min(Math.max(1, currentPage), totalPages)
 
+  // Slice transactions for active page
+  const paginatedPayments = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE
+    return filteredPayments.slice(start, start + ITEMS_PER_PAGE)
+  }, [filteredPayments, safePage])
+
+  const kpis = useMemo(() => {
     return [
       {
         label: 'Total Revenue',
-        value: formatMoney(
-          BASE_REVENUE + (currentCompletedSum - initialCompletedSum),
-        ),
+        value: formatMoney(kpisData.totalRevenue),
         sub: 'Settled store revenue',
         icon: CreditCardIcon,
         tone: 'red',
       },
       {
         label: 'Completed Payments',
-        value: completedCount,
-        sub: 'Verified recent transactions',
+        value: kpisData.completedCount,
+        sub: 'Verified transactions',
         icon: CheckCircleIcon,
         tone: 'green',
       },
       {
         label: 'Pending Amount',
-        value: formatMoney(pendingAmount),
+        value: formatMoney(kpisData.pendingAmount),
         sub: 'COD & awaiting clearance',
         icon: ClockIcon,
         tone: 'amber',
       },
       {
         label: 'Refunded Total',
-        value: formatMoney(refundedAmount),
+        value: formatMoney(kpisData.refundedAmount),
         sub: 'Returned to customers',
         icon: RefundIcon,
         tone: 'red',
       },
     ]
-  }, [payments])
-
-  const allSelected =
-    filteredPayments.length > 0 &&
-    filteredPayments.every((p) => selectedIds.includes(p.id))
-
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds([])
-    } else {
-      setSelectedIds(filteredPayments.map((p) => p.id))
-    }
-  }
-
-  const toggleSelectRow = (id) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
-    )
-  }
+  }, [kpisData])
 
   const handleUpdateStatus = (id, nextStatus) => {
-    const existing = payments.find((p) => p.id === id)
+    const existing = payments.find((p) => (p.id === id || p._id === id))
     if (!existing || existing.status === nextStatus) return
 
     const isRefundOrFail =
@@ -706,31 +710,46 @@ export default function Payments({ globalSearch = '' }) {
     setConfirmState({
       title:
         nextStatus === 'Refunded'
-          ? `Issue Refund for ${id}?`
+          ? `Issue Refund for ${existing.id || id}?`
           : nextStatus === 'Completed'
-            ? `Mark ${id} as Completed?`
+            ? `Mark ${existing.id || id} as Completed?`
             : `Change Status to ${nextStatus}?`,
       message:
         nextStatus === 'Refunded'
-          ? `Are you sure you want to issue a full refund of ${formatMoney(existing.amount)} to ${existing.customer}?`
-          : `Are you sure you want to change transaction ${id} (${formatMoney(existing.amount)}) from "${existing.status}" to "${nextStatus}"?`,
+          ? `Are you sure you want to issue a full refund of ${formatMoney(existing.amount)} to ${existing.customer}? This will update the linked order.`
+          : `Are you sure you want to change transaction ${existing.id || id} (${formatMoney(existing.amount)}) from "${existing.status}" to "${nextStatus}"?`,
       confirmText:
         nextStatus === 'Refunded'
           ? 'Yes, Issue Refund'
           : `Yes, Mark ${nextStatus}`,
       variant: isRefundOrFail ? 'danger' : 'success',
-      onConfirm: () => {
-        setPayments((prev) =>
-          prev.map((p) => (p.id === id ? { ...p, status: nextStatus } : p)),
-        )
-        setConfirmState(null)
+      onConfirm: async () => {
+        setIsUpdating(true)
+        try {
+          await paymentService.updateStatus(existing._id || id, { status: nextStatus })
+          await loadPayments()
+          setViewingPayment(null)
+        } catch (err) {
+          alert(`Failed to update payment status: ${err.message}`)
+        } finally {
+          setIsUpdating(false)
+          setConfirmState(null)
+        }
       },
     })
   }
 
-  const handleRecordPayment = (newPayment) => {
-    setPayments((prev) => [newPayment, ...prev])
-    setRecordOpen(false)
+  const handleRecordPayment = async (newPaymentData) => {
+    setIsRecording(true)
+    try {
+      await paymentService.create(newPaymentData)
+      await loadPayments()
+      setRecordOpen(false)
+    } catch (err) {
+      alert(`Failed to record payment: ${err.message}`)
+    } finally {
+      setIsRecording(false)
+    }
   }
 
   const handleExportCsv = () => {
@@ -741,7 +760,7 @@ export default function Payments({ globalSearch = '' }) {
       'Category',
       'Customer',
       'Method',
-      'Amount',
+      'Amount (INR)',
       'Date',
       'Status',
     ]
@@ -752,7 +771,7 @@ export default function Payments({ globalSearch = '' }) {
       `"${p.category}"`,
       `"${p.customer}"`,
       `"${p.method} (${p.methodDetail})"`,
-      p.amount.toFixed(2),
+      Number(p.amount || 0).toFixed(2),
       `"${p.date} ${p.time}"`,
       p.status,
     ])
@@ -761,20 +780,10 @@ export default function Payments({ globalSearch = '' }) {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'prestige-computers-payments.csv'
+    link.download = `prestige-payments-${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     URL.revokeObjectURL(url)
   }
-
-  const isFiltered =
-    Boolean(combinedSearch) ||
-    activeTab !== 'All' ||
-    methodFilter !== 'All Methods' ||
-    categoryFilter !== 'All Types'
-
-  const totalDisplayCount = isFiltered
-    ? filteredPayments.length
-    : TOTAL_TXNS_BASE + (payments.length - INITIAL_PAYMENTS.length)
 
   return (
     <div className="max-w-[1440px] mx-auto space-y-5">
@@ -782,11 +791,10 @@ export default function Payments({ globalSearch = '' }) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-[20px] sm:text-[22px] font-semibold text-[#111827] tracking-[-0.02em] leading-tight">
-            Payments
+            Payments &amp; Transactions
           </h1>
           <p className="mt-0.5 text-[12.5px] sm:text-[13px] font-normal text-[#525866]">
-            Track all payment transactions, rental deposits, pending settlements
-            and refunds.
+            Real-time ledger of orders, hardware rental deposits, counter POS payments, and settlements.
           </p>
         </div>
 
@@ -851,17 +859,17 @@ export default function Payments({ globalSearch = '' }) {
       {/* Status Filter Tabs */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         {STATUS_TABS.map((tab) => {
-          const count =
-            tab === 'All'
-              ? payments.length
-              : payments.filter((p) => p.status === tab).length
+          const count = statusCounts[tab] !== undefined ? statusCounts[tab] : 0
           const isActive = activeTab === tab
 
           return (
             <button
               key={tab}
               type="button"
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab)
+                setCurrentPage(1)
+              }}
               className={[
                 'inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap border transition-all cursor-pointer',
                 isActive
@@ -893,7 +901,10 @@ export default function Payments({ globalSearch = '' }) {
             <input
               type="text"
               value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
+              onChange={(e) => {
+                setLocalSearch(e.target.value)
+                setCurrentPage(1)
+              }}
               placeholder="Search transaction ID, order ref or customer..."
               className="w-full bg-transparent text-[12.5px] text-[#111827] placeholder:text-[#6b7280] focus:outline-none"
             />
@@ -912,7 +923,10 @@ export default function Payments({ globalSearch = '' }) {
               <select
                 id="payment-method-filter"
                 value={methodFilter}
-                onChange={(e) => setMethodFilter(e.target.value)}
+                onChange={(e) => {
+                  setMethodFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
                 className="w-full appearance-none rounded-lg border border-[#d6dae2] bg-white pl-3.5 pr-9 py-2.5 text-[12.5px] font-medium text-[#1f2937] shadow-[0_1px_2px_rgba(16,24,40,0.03)] focus:border-[#dc1414] focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15 cursor-pointer"
               >
                 {METHOD_FILTERS.map((m) => (
@@ -936,7 +950,10 @@ export default function Payments({ globalSearch = '' }) {
               <select
                 id="payment-category-filter"
                 value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
+                onChange={(e) => {
+                  setCategoryFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
                 className="w-full appearance-none rounded-lg border border-[#d6dae2] bg-white pl-3.5 pr-9 py-2.5 text-[12.5px] font-medium text-[#1f2937] shadow-[0_1px_2px_rgba(16,24,40,0.03)] focus:border-[#dc1414] focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15 cursor-pointer"
               >
                 {CATEGORY_FILTERS.map((c) => (
@@ -951,250 +968,203 @@ export default function Payments({ globalSearch = '' }) {
         </div>
       </div>
 
+      {errorMsg && (
+        <div className="p-3 bg-red-50 border border-red-200 text-xs text-[#b91c1c] rounded-xl font-medium">
+          {errorMsg}
+        </div>
+      )}
+
       {/* Payments Table Card */}
       <div className="bg-white rounded-xl border border-[#e5e7eb] shadow-[0_2px_10px_rgba(16,24,40,0.04)] overflow-hidden">
-        {/* Desktop Table */}
-        <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#f4f5f7] border-b border-[#e5e7eb] text-[13px] font-medium text-[#1f2937]">
-                <th className="py-3.5 pl-4 pr-2 w-11">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all transactions"
-                    className="w-4 h-4 rounded-[3px] border-[#cbd5e1] accent-[#dc1414] cursor-pointer align-middle"
-                  />
-                </th>
-                <th className="py-3.5 px-3">Transaction ID</th>
-                <th className="py-3.5 px-3">Reference &amp; Type</th>
-                <th className="py-3.5 px-3">Customer</th>
-                <th className="py-3.5 px-3">Method</th>
-                <th className="py-3.5 px-3">Amount</th>
-                <th className="py-3.5 px-3 text-center">Status</th>
-                <th className="py-3.5 pl-3 pr-5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#eef0f4] text-[13px]">
-              {filteredPayments.length > 0 ? (
-                filteredPayments.map((payment) => {
-                  const isChecked = selectedIds.includes(payment.id)
-                  const isRefunded = payment.status === 'Refunded'
+        {loading ? (
+          <div className="py-16 text-center text-sm text-[#6b7280] flex flex-col items-center justify-center gap-2">
+            <div className="w-6 h-6 border-2 border-[#dc1414] border-t-transparent rounded-full animate-spin" />
+            <span>Loading live transactions from database...</span>
+          </div>
+        ) : (
+          <>
+            {/* Desktop Table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-[#f4f5f7] border-b border-[#e5e7eb] text-[13px] font-medium text-[#1f2937]">
+                    <th className="py-3.5 pl-5 pr-3">Transaction ID</th>
+                    <th className="py-3.5 px-3">Reference &amp; Type</th>
+                    <th className="py-3.5 px-3">Customer</th>
+                    <th className="py-3.5 px-3">Method</th>
+                    <th className="py-3.5 px-3">Amount</th>
+                    <th className="py-3.5 px-3 text-center">Status</th>
+                    <th className="py-3.5 pl-3 pr-5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#eef0f4] text-[13px]">
+                  {paginatedPayments.length > 0 ? (
+                    paginatedPayments.map((payment) => {
+                      const isRefunded = payment.status === 'Refunded'
 
-                  return (
-                    <tr
-                      key={payment.id}
-                      className={[
-                        'transition-colors hover:bg-[#fafbfc]',
-                        isChecked ? 'bg-red-50/35' : '',
-                      ].join(' ')}
-                    >
-                      <td className="py-3.5 pl-4 pr-2">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleSelectRow(payment.id)}
-                          aria-label={`Select transaction ${payment.id}`}
-                          className="w-4 h-4 rounded-[3px] border-[#cbd5e1] accent-[#dc1414] cursor-pointer align-middle"
-                        />
+                      return (
+                        <tr
+                          key={payment.id || payment._id}
+                          className="transition-colors hover:bg-[#fafbfc]"
+                        >
+                          <td className="py-3.5 pl-5 pr-3 whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => setViewingPayment(payment)}
+                              className="font-medium text-[#dc1414] hover:underline cursor-pointer"
+                            >
+                              {payment.id}
+                            </button>
+                            <p className="text-[12px] font-normal text-[#6b7280] mt-0.5">
+                              {payment.date} &bull; {payment.time}
+                            </p>
+                          </td>
+                          <td className="py-3.5 px-3 whitespace-nowrap">
+                            <p className="text-[12.5px] font-medium text-[#111827] mb-1">
+                              {payment.referenceId}
+                            </p>
+                            <CategoryPill category={payment.category} />
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-full bg-[#111215] text-white text-[11.5px] font-medium flex items-center justify-center shrink-0">
+                                {getInitials(payment.customer)}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-[#111827] leading-snug truncate">
+                                  {payment.customer}
+                                </p>
+                                <p className="text-[12px] text-[#6b7280] truncate">
+                                  {payment.email}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3 whitespace-nowrap">
+                            <p className="text-[13px] font-medium text-[#1f2937]">
+                              {payment.method}
+                            </p>
+                            <p className="text-[12px] text-[#6b7280] mt-0.5">
+                              {payment.methodDetail}
+                            </p>
+                          </td>
+                          <td className="py-3.5 px-3 whitespace-nowrap">
+                            <span
+                              className={[
+                                'font-semibold',
+                                isRefunded
+                                  ? 'text-[#6b7280] line-through'
+                                  : 'text-[#111827]',
+                              ].join(' ')}
+                            >
+                              {formatMoney(payment.amount)}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-3 text-center">
+                            <PaymentStatusBadge status={payment.status} />
+                          </td>
+                          <td className="py-3.5 pl-3 pr-5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setViewingPayment(payment)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dce0e8] bg-white hover:bg-[#f3f4f6] text-[12px] font-medium text-[#1f2937] transition-colors cursor-pointer"
+                            >
+                              <ReceiptIcon className="w-4 h-4 text-[#4b5563]" />
+                              <span>Receipt</span>
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="py-12 text-center text-[13px] font-normal text-[#6b7280]"
+                      >
+                        No transactions match your current filters.
                       </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile & Tablet Card View */}
+            <div className="lg:hidden divide-y divide-[#eef0f4]">
+              {paginatedPayments.length > 0 ? (
+                paginatedPayments.map((payment) => (
+                  <div key={payment.id || payment._id} className="p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
                         <button
                           type="button"
                           onClick={() => setViewingPayment(payment)}
-                          className="font-medium text-[#dc1414] hover:underline cursor-pointer"
+                          className="text-[13.5px] font-medium text-[#dc1414] hover:underline cursor-pointer"
                         >
                           {payment.id}
                         </button>
-                        <p className="text-[12px] font-normal text-[#6b7280] mt-0.5">
+                        <p className="text-[12px] text-[#6b7280]">
                           {payment.date} &bull; {payment.time}
                         </p>
-                      </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <p className="text-[12.5px] font-medium text-[#111827] mb-1">
-                          {payment.referenceId}
+                      </div>
+                      <PaymentStatusBadge status={payment.status} />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[12.5px] font-medium text-[#111827]">
+                          {payment.customer}
                         </p>
-                        <CategoryPill category={payment.category} />
-                      </td>
-                      <td className="py-3.5 px-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-[#111215] text-white text-[11.5px] font-medium flex items-center justify-center shrink-0">
-                            {getInitials(payment.customer)}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-medium text-[#111827] leading-snug truncate">
-                              {payment.customer}
-                            </p>
-                            <p className="text-[12px] text-[#6b7280] truncate">
-                              {payment.email}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <p className="text-[13px] font-medium text-[#1f2937]">
-                          {payment.method}
+                        <p className="text-[12px] text-[#4b5563]">
+                          Ref {payment.referenceId} &bull; {payment.method}
                         </p>
-                        <p className="text-[12px] text-[#6b7280] mt-0.5">
-                          {payment.methodDetail}
-                        </p>
-                      </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <span
-                          className={[
-                            'font-semibold',
-                            isRefunded
-                              ? 'text-[#6b7280] line-through'
-                              : 'text-[#111827]',
-                          ].join(' ')}
-                        >
-                          {formatMoney(payment.amount)}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-3 text-center">
-                        <PaymentStatusBadge status={payment.status} />
-                      </td>
-                      <td className="py-3.5 pl-3 pr-5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setViewingPayment(payment)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dce0e8] bg-white hover:bg-[#f3f4f6] text-[12px] font-medium text-[#1f2937] transition-colors cursor-pointer"
-                        >
-                          <ReceiptIcon className="w-4 h-4 text-[#4b5563]" />
-                          <span>Receipt</span>
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })
+                      </div>
+                      <CategoryPill category={payment.category} />
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[13.5px] font-semibold text-[#111827]">
+                        {formatMoney(payment.amount)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setViewingPayment(payment)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dce0e8] bg-white hover:bg-[#f3f4f6] text-[12px] font-medium text-[#1f2937] cursor-pointer"
+                      >
+                        <ReceiptIcon className="w-4 h-4 text-[#4b5563]" />
+                        <span>Receipt</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
               ) : (
-                <tr>
-                  <td
-                    colSpan={8}
-                    className="py-12 text-center text-[13px] font-normal text-[#6b7280]"
-                  >
-                    No transactions match your current filters.
-                  </td>
-                </tr>
+                <div className="py-10 text-center text-[12.5px] text-[#6b7280]">
+                  No transactions match your current filters.
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile & Tablet Card View */}
-        <div className="lg:hidden divide-y divide-[#eef0f4]">
-          {filteredPayments.length > 0 ? (
-            filteredPayments.map((payment) => (
-              <div key={payment.id} className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => setViewingPayment(payment)}
-                      className="text-[13.5px] font-medium text-[#dc1414] hover:underline cursor-pointer"
-                    >
-                      {payment.id}
-                    </button>
-                    <p className="text-[12px] text-[#6b7280]">
-                      {payment.date} &bull; {payment.time}
-                    </p>
-                  </div>
-                  <PaymentStatusBadge status={payment.status} />
-                </div>
-
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-[12.5px] font-medium text-[#111827]">
-                      {payment.customer}
-                    </p>
-                    <p className="text-[12px] text-[#4b5563]">
-                      Ref {payment.referenceId} &bull; {payment.method}
-                    </p>
-                  </div>
-                  <CategoryPill category={payment.category} />
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-[13.5px] font-semibold text-[#111827]">
-                    {formatMoney(payment.amount)}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setViewingPayment(payment)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dce0e8] bg-white hover:bg-[#f3f4f6] text-[12px] font-medium text-[#1f2937] cursor-pointer"
-                  >
-                    <ReceiptIcon className="w-4 h-4 text-[#4b5563]" />
-                    <span>Receipt</span>
-                  </button>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="py-10 text-center text-[12.5px] text-[#6b7280]">
-              No transactions match your current filters.
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
-      {/* Pagination Footer */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-0.5">
-        <p className="text-[13px] font-normal text-[#4b5563]">
-          {filteredPayments.length > 0
-            ? `Showing 1 to ${filteredPayments.length} of ${totalDisplayCount} transactions`
-            : 'Showing 0 transactions'}
-        </p>
-
-        <div className="flex items-center gap-1.5 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            aria-label="Previous page"
-            className="w-8 h-8 rounded-md border border-[#dce0e8] bg-white text-[#374151] hover:bg-[#f9fafb] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <ChevronLeftIcon />
-          </button>
-
-          {PAGES.map((page) => {
-            const isActive = currentPage === page
-            return (
-              <button
-                key={page}
-                type="button"
-                onClick={() => setCurrentPage(page)}
-                className={[
-                  'w-8 h-8 rounded-md text-[13px] font-medium flex items-center justify-center border transition-all cursor-pointer',
-                  isActive
-                    ? 'bg-gradient-to-b from-[#e01414] to-[#c40b0b] text-white border-[#c40b0b] shadow-xs'
-                    : 'bg-white border-[#dce0e8] text-[#1f2937] hover:bg-[#f9fafb]',
-                ].join(' ')}
-              >
-                {page}
-              </button>
-            )
-          })}
-
-          <button
-            type="button"
-            onClick={() => setCurrentPage((p) => Math.min(PAGES.length, p + 1))}
-            disabled={currentPage === PAGES.length}
-            aria-label="Next page"
-            className="w-8 h-8 rounded-md border border-[#dce0e8] bg-white text-[#374151] hover:bg-[#f9fafb] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <ChevronRightIcon />
-          </button>
-        </div>
-      </div>
+      {/* Fully Dynamic Pagination Footer */}
+      <Pagination
+        currentPage={safePage}
+        totalItems={filteredPayments.length}
+        pageSize={ITEMS_PER_PAGE}
+        onPageChange={setCurrentPage}
+        itemName="transactions"
+      />
 
       {/* Payment Receipt & Status Modal */}
       {viewingPayment && (
         <PaymentReceiptModal
-          key={viewingPayment.id}
+          key={viewingPayment.id || viewingPayment._id}
           payment={viewingPayment}
           onClose={() => setViewingPayment(null)}
           onUpdateStatus={handleUpdateStatus}
+          isUpdating={isUpdating}
         />
       )}
 
@@ -1204,6 +1174,7 @@ export default function Payments({ globalSearch = '' }) {
           isOpen={recordOpen}
           onClose={() => setRecordOpen(false)}
           onRecord={handleRecordPayment}
+          isRecording={isRecording}
         />
       )}
 

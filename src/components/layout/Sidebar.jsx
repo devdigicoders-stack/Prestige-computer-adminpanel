@@ -11,8 +11,11 @@ import {
   HomeIcon,
   InventoryIcon,
   LogoutIcon,
+  MailIcon,
   ProductsIcon,
   SettingsIcon,
+  StarIcon,
+  TagIcon,
   UsersIcon,
 } from '../common/Icons'
 
@@ -24,7 +27,10 @@ const ICON_MAP = {
   orders: CartIcon,
   rentals: CalendarIcon,
   customers: UsersIcon,
+  enquiries: MailIcon,
   payments: CreditCardIcon,
+  coupons: TagIcon,
+  reviews: StarIcon,
   reports: BarChartIcon,
   settings: SettingsIcon,
 }

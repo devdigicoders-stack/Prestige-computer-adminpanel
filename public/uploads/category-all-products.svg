@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="allGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#b91c1c" />
+    </linearGradient>
+    <filter id="allShadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity="0.2" />
+    </filter>
+  </defs>
+  <rect x="22" y="22" width="34" height="34" rx="8" fill="url(#allGrad)" filter="url(#allShadow)" />
+  <rect x="64" y="22" width="34" height="34" rx="8" fill="url(#allGrad)" filter="url(#allShadow)" />
+  <rect x="22" y="64" width="34" height="34" rx="8" fill="url(#allGrad)" filter="url(#allShadow)" />
+  <rect x="64" y="64" width="34" height="34" rx="8" fill="url(#allGrad)" filter="url(#allShadow)" />
+  <!-- Sparkle highlight -->
+  <circle cx="39" cy="39" r="6" fill="#ffffff" fill-opacity="0.4" />
+  <circle cx="81" cy="39" r="6" fill="#ffffff" fill-opacity="0.4" />
+  <circle cx="39" cy="81" r="6" fill="#ffffff" fill-opacity="0.4" />
+  <circle cx="81" cy="81" r="6" fill="#ffffff" fill-opacity="0.4" />
+</svg>

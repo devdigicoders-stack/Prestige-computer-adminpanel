@@ -1,155 +1,145 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
+import Pagination from '../../components/common/Pagination'
 import {
   CartIcon,
   ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   CloseIcon,
   CreditCardIcon,
   PlusIcon,
   SearchIcon,
 } from '../../components/common/Icons'
-
-const INITIAL_ORDERS = [
-  {
-    id: '#PC12845',
-    date: 'Nov 30, 2026',
-    time: '2:15 PM',
-    customer: 'Aarav Sharma',
-    email: 'aarav.sharma@gmail.com',
-    phone: '+91 98204 51230',
-    address: '402 Tech Park Ave, Bandra West, Mumbai 400050',
-    items: [{ name: 'Dell XPS 15 (2024)', qty: 1, price: 1799.0 }],
-    type: 'Purchase',
-    paymentMethod: 'Credit Card (Visa)',
-    paymentStatus: 'Paid',
-    status: 'Processing',
-  },
-  {
-    id: '#PC12844',
-    date: 'Nov 30, 2026',
-    time: '11:40 AM',
-    customer: 'Priya Verma',
-    email: 'priya.v@outlook.com',
-    phone: '+91 98112 34901',
-    address: '18 Cyber Hub Tower B, Gurugram 122002',
-    items: [
-      { name: 'HP EliteBook 840 G10', qty: 1, price: 1299.0 },
-      { name: 'HP EliteBook 840 G10 (Dock Bundle)', qty: 1, price: 1299.0 },
-    ],
-    type: 'Purchase',
-    paymentMethod: 'UPI / NetBanking',
-    paymentStatus: 'Paid',
-    status: 'Shipped',
-  },
-  {
-    id: '#PC12843',
-    date: 'Nov 29, 2026',
-    time: '6:05 PM',
-    customer: 'Rohan Mehta',
-    email: 'rohan.mehta@techcorp.in',
-    phone: '+91 99001 77421',
-    address: '75 Indiranagar 100ft Rd, Bengaluru 560038',
-    items: [{ name: 'ASUS ROG Strix G16', qty: 1, price: 2099.0 }],
-    type: 'Purchase',
-    paymentMethod: 'Credit Card (Mastercard)',
-    paymentStatus: 'Paid',
-    status: 'Delivered',
-  },
-  {
-    id: '#PC12842',
-    date: 'Nov 29, 2026',
-    time: '3:20 PM',
-    customer: 'Neha Kapoor',
-    email: 'neha.kapoor@studio.co',
-    phone: '+91 98765 40129',
-    address: '12 Koregaon Park Lane 5, Pune 411001',
-    items: [{ name: 'Apple MacBook Air M2 (30-Day Rent)', qty: 1, price: 199.0 }],
-    type: 'Rental',
-    paymentMethod: 'UPI',
-    paymentStatus: 'Paid',
-    status: 'Delivered',
-  },
-  {
-    id: '#PC12841',
-    date: 'Nov 28, 2026',
-    time: '5:50 PM',
-    customer: 'Vikram Singh',
-    email: 'vikram.s@gmail.com',
-    phone: '+91 97170 88214',
-    address: '29 Connaught Circus, New Delhi 110001',
-    items: [{ name: 'Lenovo ThinkPad T14', qty: 1, price: 1199.0 }],
-    type: 'Purchase',
-    paymentMethod: 'Cash on Delivery',
-    paymentStatus: 'Pending',
-    status: 'Pending',
-  },
-  {
-    id: '#PC12840',
-    date: 'Nov 28, 2026',
-    time: '1:10 PM',
-    customer: 'Ananya Iyer',
-    email: 'ananya.iyer@design.io',
-    phone: '+91 98401 66318',
-    address: '88 Anna Salai, Teynampet, Chennai 600018',
-    items: [{ name: 'RTX 4070 Custom RGB Tower', qty: 1, price: 2499.0 }],
-    type: 'Purchase',
-    paymentMethod: 'Credit Card (Visa)',
-    paymentStatus: 'Refunded',
-    status: 'Cancelled',
-  },
-]
+import orderService from '../../services/orderService'
 
 const ORDER_STATUSES = [
   'All',
   'Pending',
+  'Confirmed',
   'Processing',
   'Shipped',
+  'Out for Delivery',
   'Delivered',
   'Cancelled',
 ]
-const PAYMENT_FILTERS = ['All Payments', 'Paid', 'Pending', 'Refunded']
+
+const PAYMENT_FILTERS = ['All Payments', 'Paid', 'Pending', 'Refunded', 'Failed']
 const TYPE_FILTERS = ['All Types', 'Purchase', 'Rental']
-const PAGES = [1, 2, 3, 4, 5]
-const TOTAL_ORDERS_BASE = 1248
+const ITEMS_PER_PAGE = 8
+
+function formatMoney(amount) {
+  return `₹${Number(amount || 0).toLocaleString('en-IN')}`
+}
 
 function getOrderTotal(order) {
-  return order.items.reduce((sum, item) => sum + item.price * item.qty, 0)
+  if (order.totalPrice !== undefined && order.totalPrice !== null) {
+    return Number(order.totalPrice)
+  }
+  return (order.items || []).reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.qty) || 1), 0)
 }
 
 function getItemCount(order) {
-  return order.items.reduce((sum, item) => sum + item.qty, 0)
+  return (order.items || []).reduce((sum, item) => sum + (Number(item.qty) || 1), 0)
 }
 
-function formatMoney(amount) {
-  return `$${Number(amount).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
-}
-
-function getInitials(name) {
+function getInitials(name = '') {
   return name
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0].toUpperCase())
-    .join('')
+    .join('') || 'PC'
+}
+
+function resolveImageUrl(img) {
+  if (!img) return ''
+  if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:')) return img
+  return `http://localhost:5000${img.startsWith('/') ? '' : '/'}${img}`
+}
+
+function normalizeOrder(order) {
+  const num = order.orderNumber || (order._id ? `#${order._id.slice(-6).toUpperCase()}` : order.id || '#PCS-1001')
+  const dateObj = order.createdAt ? new Date(order.createdAt) : null
+  const formattedDate = dateObj
+    ? dateObj.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
+    : order.date || 'Today'
+  const formattedTime = dateObj
+    ? dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    : order.time || 'Just now'
+
+  const items = (order.orderItems || order.items || []).map((it) => {
+    let name = it.name || it.title || it.product?.name || it.product?.title || 'Computer System'
+    let specs = typeof it.specs === 'string' ? it.specs : (it.specs?.cpu ? `${it.specs.cpu} | ${it.specs.ram || ''}` : '')
+
+    // Clean up any historical dummy fallback if present in old records
+    if (name === 'Prestige Certified Hardware' || name === 'Product Hardware System') {
+      if (specs && specs !== 'Prestige Certified Hardware') {
+        name = specs
+        specs = ''
+      } else if (it.productId && !it.productId.startsWith('item-')) {
+        name = it.productId.replace(/[-_]/g, ' ')
+      }
+    }
+
+    return {
+      name,
+      qty: Number(it.quantity || it.qty || 1),
+      price: Number(it.price || 0),
+      originalPrice: Number(it.originalPrice || 0),
+      specs,
+      image: it.image || it.product?.image || '',
+      type: it.type === 'Rent' || it.type === 'Rental' ? 'Rental' : 'Purchase',
+    }
+  })
+
+  const hasRent = items.some((i) => i.type === 'Rental')
+  const addressParts = [
+    order.shippingAddress?.street || order.address,
+    order.shippingAddress?.city,
+    order.shippingAddress?.state,
+    order.shippingAddress?.postalCode,
+    order.shippingAddress?.country || 'India',
+  ].filter(Boolean)
+
+  const itemsSubtotal = Number(order.itemsPrice !== undefined ? order.itemsPrice : items.reduce((sum, it) => sum + it.price * it.qty, 0))
+  const shippingCharge = Number(order.shippingPrice !== undefined ? order.shippingPrice : (order.deliveryMethod === 'express' ? 199 : 0))
+  const discountAmount = Number(order.discountPrice || 0)
+  const taxAmount = Number(order.taxPrice || 0)
+  const orderTotal = Number(order.totalPrice !== undefined ? order.totalPrice : Math.max(0, itemsSubtotal + shippingCharge - discountAmount + taxAmount))
+
+  return {
+    id: num,
+    _id: order._id || order.id,
+    orderNumber: num,
+    date: formattedDate,
+    time: formattedTime,
+    customer: order.customer?.name || order.shippingAddress?.name || order.customer || 'Customer',
+    email: order.customer?.email || order.shippingAddress?.email || order.email || 'N/A',
+    phone: order.customer?.phone || order.shippingAddress?.phone || order.phone || 'N/A',
+    address: addressParts.length > 0 ? addressParts.join(', ') : 'Walk-in Store Pickup',
+    shippingAddress: order.shippingAddress || null,
+    items,
+    type: hasRent ? 'Rental' : 'Purchase',
+    deliveryMethod: order.deliveryMethod || 'standard',
+    paymentMethod: order.paymentMethod || 'Online Payment',
+    paymentStatus: order.paymentStatus || (order.isPaid ? 'Paid' : 'Pending'),
+    status: order.orderStatus || order.status || 'Pending',
+    courier: order.courier || '',
+    trackingNumber: order.trackingNumber || '',
+    notes: order.notes || '',
+    itemsPrice: itemsSubtotal,
+    shippingPrice: shippingCharge,
+    discountPrice: discountAmount,
+    taxPrice: taxAmount,
+    totalPrice: orderTotal,
+    timeline: order.timeline || [],
+    rawCreatedAt: order.createdAt || null,
+    createdAt: order.createdAt || null,
+  }
 }
 
 function EyeIcon({ className = 'w-[17px] h-[17px]' }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M2.25 12S5.75 5.5 12 5.5 21.75 12 21.75 12 18.25 18.5 12 18.5 2.25 12 2.25 12Z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
@@ -158,16 +148,7 @@ function EyeIcon({ className = 'w-[17px] h-[17px]' }) {
 
 function ClockIcon({ className = 'w-5 h-5' }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" />
     </svg>
@@ -176,16 +157,7 @@ function ClockIcon({ className = 'w-5 h-5' }) {
 
 function CheckCircleIcon({ className = 'w-5 h-5' }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="9" />
       <path d="m8.8 12.2 2.2 2.2 4.4-4.6" />
     </svg>
@@ -194,16 +166,7 @@ function CheckCircleIcon({ className = 'w-5 h-5' }) {
 
 function DownloadIcon({ className = 'w-4 h-4' }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 3v12" />
       <path d="m7 10 5 5 5-5" />
       <path d="M4 20h16" />
@@ -214,8 +177,10 @@ function DownloadIcon({ className = 'w-4 h-4' }) {
 function OrderStatusBadge({ status }) {
   const styles = {
     Pending: 'bg-[#fef3c7] text-[#b45309]',
+    Confirmed: 'bg-[#e0f2fe] text-[#0369a1]',
     Processing: 'bg-[#dbeafe] text-[#1d4ed8]',
     Shipped: 'bg-[#ede9fe] text-[#6d28d9]',
+    'Out for Delivery': 'bg-[#ffedd5] text-[#c2410c]',
     Delivered: 'bg-[#dcfce7] text-[#15803d]',
     Cancelled: 'bg-[#fee2e2] text-[#b91c1c]',
   }
@@ -237,175 +202,349 @@ function PaymentBadge({ status }) {
     Paid: { dot: 'bg-[#16a34a]', text: 'text-[#15803d]' },
     Pending: { dot: 'bg-[#d97706]', text: 'text-[#b45309]' },
     Refunded: { dot: 'bg-[#6b7280]', text: 'text-[#4b5563]' },
+    Failed: { dot: 'bg-[#dc2626]', text: 'text-[#b91c1c]' },
   }
   const c = config[status] || config.Pending
 
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 text-[12px] font-medium whitespace-nowrap ${c.text}`}
-    >
+    <span className={`inline-flex items-center gap-1.5 text-[12px] font-medium whitespace-nowrap ${c.text}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
       {status}
     </span>
   )
 }
 
-function OrderDetailModal({ order, onClose, onUpdateStatus }) {
+function OrderDetailModal({ order, onClose, onUpdateStatus, onDeleteOrder }) {
   const [status, setStatus] = useState(order?.status || 'Pending')
-  const [paymentStatus, setPaymentStatus] = useState(
-    order?.paymentStatus || 'Pending',
-  )
+  const [paymentStatus, setPaymentStatus] = useState(order?.paymentStatus || 'Pending')
+  const [courier, setCourier] = useState(order?.courier || '')
+  const [trackingNumber, setTrackingNumber] = useState(order?.trackingNumber || '')
+  const [notes, setNotes] = useState(order?.notes || '')
+  const [saving, setSaving] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   if (!order) return null
 
-  const total = getOrderTotal(order)
+  const items = order.items || []
+  const subtotal = order.itemsPrice !== undefined ? Number(order.itemsPrice) : items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.qty) || 1), 0)
+  const shippingPrice = order.shippingPrice !== undefined ? Number(order.shippingPrice) : (order.deliveryMethod === 'express' ? 199 : 0)
+  const discountPrice = Number(order.discountPrice || 0)
+  const taxPrice = Number(order.taxPrice || 0)
+  const total = order.totalPrice !== undefined ? Number(order.totalPrice) : Math.max(0, subtotal + shippingPrice - discountPrice + taxPrice)
 
-  const handleSave = () => {
-    onUpdateStatus(order.id, status, paymentStatus)
-    onClose()
+  const handleCopyTracking = () => {
+    if (trackingNumber) {
+      navigator.clipboard?.writeText(trackingNumber)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onUpdateStatus(order._id || order.id, {
+        orderStatus: status,
+        paymentStatus,
+        courier: courier.trim(),
+        trackingNumber: trackingNumber.trim(),
+        notes: notes.trim(),
+      })
+      onClose()
+    } catch {
+      // handled in parent
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[1px] p-4">
-      <div className="w-full max-w-[560px] rounded-xl bg-white border border-[#e5e7eb] shadow-[0_20px_50px_rgba(16,24,40,0.22)] overflow-hidden max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
+      <div className="w-full max-w-[680px] rounded-2xl bg-white border border-[#e5e7eb] shadow-[0_25px_60px_rgba(16,24,40,0.25)] overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#eef0f4] shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#eef0f4] bg-white shrink-0">
           <div>
             <div className="flex items-center gap-2.5">
-              <h3 className="text-[15px] font-semibold text-[#111827]">
-                Order {order.id}
+              <h3 className="text-[16px] font-semibold text-[#111827]">
+                Order {order.orderNumber || order.id}
               </h3>
-              <OrderStatusBadge status={order.status} />
+              <OrderStatusBadge status={status} />
             </div>
             <p className="text-[12px] font-normal text-[#6b7280] mt-0.5">
-              Placed on {order.date} at {order.time} &bull; {order.type}
+              Placed on {order.date} at {order.time} &bull;{' '}
+              <span className="font-medium text-[#374151]">{order.type} Order</span>
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-1.5 rounded-lg text-[#6b7280] hover:text-[#111827] hover:bg-gray-100 cursor-pointer"
+            className="p-1.5 rounded-lg text-[#6b7280] hover:text-[#111827] hover:bg-gray-100 transition-colors cursor-pointer"
           >
             <CloseIcon className="w-4 h-4" />
           </button>
         </div>
 
         {/* Scrollable Content */}
-        <div className="p-5 space-y-5 overflow-y-auto">
-          {/* Customer & Shipping */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl bg-[#f8f9fb] border border-[#eef0f4] p-4">
+        <div className="p-6 space-y-5 overflow-y-auto">
+          {/* Customer & Shipping Summary */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl bg-[#f8f9fb] border border-[#eef0f4] p-4 text-[12.5px]">
             <div>
-              <p className="text-[11.5px] font-normal uppercase tracking-wider text-[#6b7280]">
-                Customer
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6b7280]">
+                Customer Information
               </p>
-              <p className="text-[13px] font-medium text-[#111827] mt-1">
+              <p className="text-[13.5px] font-semibold text-[#111827] mt-1.5">
                 {order.customer}
               </p>
-              <p className="text-[12px] text-[#4b5563]">{order.email}</p>
+              <p className="text-[12px] text-[#4b5563] mt-0.5">{order.email}</p>
               <p className="text-[12px] text-[#4b5563]">{order.phone}</p>
             </div>
             <div>
-              <p className="text-[11.5px] font-normal uppercase tracking-wider text-[#6b7280]">
-                Shipping &amp; Payment
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6b7280]">
+                Shipping &amp; Delivery
               </p>
-              <p className="text-[12px] text-[#374151] mt-1 leading-relaxed">
+              <p className="text-[12px] text-[#374151] mt-1.5 leading-relaxed">
                 {order.address}
               </p>
-              <p className="text-[12px] font-medium text-[#111827] mt-1.5">
-                {order.paymentMethod}
-              </p>
-            </div>
-          </div>
-
-          {/* Items Table */}
-          <div>
-            <p className="text-[13px] font-medium text-[#111827] mb-2">
-              Order Items
-            </p>
-            <div className="rounded-xl border border-[#e5e7eb] divide-y divide-[#eef0f4]">
-              {order.items.map((item, idx) => (
-                <div
-                  key={`${item.name}-${idx}`}
-                  className="px-4 py-3 flex items-center justify-between gap-3 text-[12.5px]"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-[#111827] truncate">
-                      {item.name}
-                    </p>
-                    <p className="text-[12px] text-[#6b7280]">
-                      Qty: {item.qty} &times; {formatMoney(item.price)}
-                    </p>
-                  </div>
-                  <span className="font-medium text-[#111827] shrink-0">
-                    {formatMoney(item.price * item.qty)}
-                  </span>
-                </div>
-              ))}
-              <div className="px-4 py-3 bg-[#f8f9fb] flex items-center justify-between text-[13px]">
-                <span className="font-medium text-[#111827]">Total Amount</span>
-                <span className="text-[14.5px] font-semibold text-[#dc1414]">
-                  {formatMoney(total)}
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-md bg-white border border-[#e5e7eb] text-[#374151]">
+                  {order.deliveryMethod === 'express' ? '⚡ Express' : '🚚 Standard'}
                 </span>
+                <span className="text-[11.5px] text-[#6b7280]">Payment:</span>
+                <span className="font-medium text-[#111827]">{order.paymentMethod}</span>
+                <PaymentBadge status={paymentStatus} />
               </div>
             </div>
           </div>
 
-          {/* Status Update Controls */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            <div>
-              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
-                Order Status
-              </label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[12.5px] font-medium text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
-              >
-                {ORDER_STATUSES.filter((s) => s !== 'All').map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
+          {/* Ordered Items Table */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[13px] font-semibold text-[#111827]">
+                Ordered Hardware &amp; Items ({getItemCount(order)})
+              </p>
+              <span className="text-[12px] font-medium text-[#6b7280]">
+                {order.type} Order
+              </span>
             </div>
-            <div>
-              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
-                Payment Status
-              </label>
-              <select
-                value={paymentStatus}
-                onChange={(e) => setPaymentStatus(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[12.5px] font-medium text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
-              >
-                {PAYMENT_FILTERS.filter((p) => p !== 'All Payments').map(
-                  (p) => (
+            <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+              <div className="divide-y divide-[#eef0f4]">
+                {items.map((item, idx) => (
+                  <div
+                    key={`${item.name}-${idx}`}
+                    className="p-3.5 flex items-center justify-between gap-3 text-[12.5px] hover:bg-[#fafbfc] transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-12 h-12 rounded-lg border border-[#e5e7eb] bg-[#f8f9fb] flex items-center justify-center shrink-0 overflow-hidden">
+                        {item.image ? (
+                          <img
+                            src={resolveImageUrl(item.image)}
+                            alt={item.name}
+                            className="w-full h-full object-contain p-1"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none'
+                            }}
+                          />
+                        ) : (
+                          <CartIcon className="w-5 h-5 text-[#9ca3af]" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-[#111827] leading-tight truncate">
+                          {item.name}
+                        </p>
+                        {item.specs && (
+                          <p className="text-[11.5px] text-[#6b7280] truncate mt-0.5">
+                            {item.specs}
+                          </p>
+                        )}
+                        <p className="text-[11.5px] text-[#9ca3af] mt-0.5">
+                          Qty: {item.qty} &times; {formatMoney(item.price)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="font-bold text-[#111827] text-[13px]">
+                        {formatMoney(item.price * item.qty)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Exact Dynamic Price Breakdown */}
+              <div className="bg-[#f8f9fb] p-4 border-t border-[#e5e7eb] space-y-2 text-[12.5px]">
+                <div className="flex items-center justify-between text-[#4b5563]">
+                  <span>Items Subtotal</span>
+                  <span className="font-semibold text-[#111827]">{formatMoney(subtotal)}</span>
+                </div>
+                <div className="flex items-center justify-between text-[#4b5563]">
+                  <span>Delivery Charges ({order.deliveryMethod === 'express' ? 'Express' : 'Standard'})</span>
+                  <span className="font-semibold text-[#111827]">
+                    {shippingPrice === 0 ? (
+                      <span className="text-emerald-600">Free Delivery</span>
+                    ) : (
+                      `+ ${formatMoney(shippingPrice)}`
+                    )}
+                  </span>
+                </div>
+                {discountPrice > 0 && (
+                  <div className="flex items-center justify-between text-emerald-600 font-medium">
+                    <span>Discount Applied</span>
+                    <span>- {formatMoney(discountPrice)}</span>
+                  </div>
+                )}
+                {taxPrice > 0 && (
+                  <div className="flex items-center justify-between text-[#4b5563]">
+                    <span>Taxes (GST)</span>
+                    <span>+ {formatMoney(taxPrice)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between pt-2.5 border-t border-[#e5e7eb] text-[13.5px]">
+                  <span className="font-bold text-[#111827]">Total Order Amount</span>
+                  <span className="text-[16px] font-black text-[#dc1414]">
+                    {formatMoney(total)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Status & Logistics Settings */}
+          <div className="rounded-xl border border-[#eef0f4] bg-[#fafbfc] p-4 space-y-4">
+            <p className="text-[12px] font-semibold uppercase tracking-wider text-[#374151]">
+              Order Fulfillment &amp; Logistics Control
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                  Order Status
+                </label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  className="w-full rounded-lg border border-[#d6dae2] bg-white px-3 py-2 text-[12.5px] font-medium text-[#111827] focus:border-[#dc1414] focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+                >
+                  {ORDER_STATUSES.filter((s) => s !== 'All').map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                  Payment Status
+                </label>
+                <select
+                  value={paymentStatus}
+                  onChange={(e) => setPaymentStatus(e.target.value)}
+                  className="w-full rounded-lg border border-[#d6dae2] bg-white px-3 py-2 text-[12.5px] font-medium text-[#111827] focus:border-[#dc1414] focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+                >
+                  {PAYMENT_FILTERS.filter((p) => p !== 'All Payments').map((p) => (
                     <option key={p} value={p}>
                       {p}
                     </option>
-                  ),
-                )}
-              </select>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                  Courier Partner
+                </label>
+                <input
+                  type="text"
+                  list="courier-partner-list"
+                  value={courier}
+                  onChange={(e) => setCourier(e.target.value)}
+                  placeholder="Select or enter courier (e.g. Delhivery, BlueDart)"
+                  className="w-full rounded-lg border border-[#d6dae2] bg-white px-3 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:outline-none"
+                />
+                <datalist id="courier-partner-list">
+                  <option value="Delhivery" />
+                  <option value="BlueDart Express" />
+                  <option value="DTDC" />
+                  <option value="Ekart Logistics" />
+                  <option value="India Post" />
+                  <option value="Shadowfax" />
+                  <option value="XpressBees" />
+                </datalist>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-[12px] font-medium text-[#374151]">
+                    Tracking Number / AWB
+                  </label>
+                  {trackingNumber && (
+                    <button
+                      type="button"
+                      onClick={handleCopyTracking}
+                      className="text-[11px] font-medium text-[#dc1414] hover:underline cursor-pointer"
+                    >
+                      {copied ? 'Copied!' : 'Copy Code'}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={trackingNumber}
+                  onChange={(e) => setTrackingNumber(e.target.value)}
+                  placeholder="Enter AWB or tracking number"
+                  className="w-full rounded-lg border border-[#d6dae2] bg-white px-3 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:outline-none font-mono"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-[#374151] mb-1">
+                Admin Fulfillment Notes (Optional)
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={2}
+                placeholder="Add internal dispatch notes, serial numbers, warranty tags..."
+                className="w-full rounded-lg border border-[#d6dae2] bg-white px-3 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:outline-none resize-none"
+              />
             </div>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-[#eef0f4] bg-[#fafbfc] shrink-0">
+        {/* Modal Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#eef0f4] bg-[#fafbfc] shrink-0">
           <button
             type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-[#d6dae2] bg-white text-[12.5px] font-medium text-[#374151] hover:bg-gray-50 cursor-pointer"
+            onClick={() => {
+              onDeleteOrder(order._id || order.id)
+              onClose()
+            }}
+            className="text-[12.5px] font-medium text-[#dc2626] hover:text-[#b91c1c] hover:underline cursor-pointer"
           >
-            Close
+            Delete Order
           </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs cursor-pointer"
-          >
-            Update Order
-          </button>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="px-4 py-2 rounded-lg border border-[#d6dae2] bg-white text-[12.5px] font-medium text-[#374151] hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs transition-all disabled:opacity-60 cursor-pointer"
+            >
+              {saving ? 'Updating...' : 'Update Order Status'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -415,117 +554,229 @@ function OrderDetailModal({ order, onClose, onUpdateStatus }) {
 function CreateOrderModal({ isOpen, onClose, onCreate }) {
   const [customer, setCustomer] = useState('')
   const [email, setEmail] = useState('')
-  const [productName, setProductName] = useState('Dell XPS 15 (2024)')
+  const [phone, setPhone] = useState('')
+  const [address, setAddress] = useState('')
+  const [city, setCity] = useState('Kanpur')
+  const [state, setState] = useState('Uttar Pradesh')
+  const [pincode, setPincode] = useState('208025')
+  const [productName, setProductName] = useState('Dell Inspiron 15 (2025)')
+  const [specs, setSpecs] = useState('13th Gen Intel Core i5 | 16GB RAM | 512GB SSD')
   const [qty, setQty] = useState('1')
-  const [price, setPrice] = useState('1799')
+  const [price, setPrice] = useState('52999')
   const [type, setType] = useState('Purchase')
+  const [paymentMethod, setPaymentMethod] = useState('UPI')
   const [paymentStatus, setPaymentStatus] = useState('Paid')
-  const [status, setStatus] = useState('Processing')
+  const [status, setStatus] = useState('Confirmed')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   if (!isOpen) return null
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!customer.trim() || !productName.trim()) {
-      setError('Please enter customer name and product.')
+      setError('Please enter customer name and product title.')
       return
     }
     const parsedQty = Math.max(1, Number.parseInt(qty, 10) || 1)
     const parsedPrice = Number.parseFloat(price)
     if (Number.isNaN(parsedPrice) || parsedPrice < 0) {
-      setError('Please enter a valid price.')
+      setError('Please enter a valid price in ₹.')
       return
     }
 
-    onCreate({
-      id: `#PC${Math.floor(12846 + Math.random() * 900)}`,
-      date: 'Nov 30, 2026',
-      time: 'Just now',
-      customer: customer.trim(),
-      email:
-        email.trim() ||
-        `${customer.trim().toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
-      phone: '+91 98000 12345',
-      address: 'Walk-in Store / Standard Delivery',
-      items: [{ name: productName.trim(), qty: parsedQty, price: parsedPrice }],
-      type,
-      paymentMethod: 'Store POS / Online',
+    setSubmitting(true)
+    setError('')
+
+    const orderData = {
+      customer: {
+        name: customer.trim(),
+        email: email.trim() || `${customer.trim().toLowerCase().replace(/\s+/g, '.')}@gmail.com`,
+        phone: phone.trim() || '+91 98765 43210',
+      },
+      shippingAddress: {
+        name: customer.trim(),
+        phone: phone.trim() || '+91 98765 43210',
+        street: address.trim() || 'Prestige Walk-in / Store POS',
+        city: city.trim() || 'Kanpur',
+        state: state.trim() || 'Uttar Pradesh',
+        postalCode: pincode.trim() || '208025',
+        country: 'India',
+        addressType: 'Home',
+      },
+      orderItems: [
+        {
+          name: productName.trim(),
+          title: productName.trim(),
+          quantity: parsedQty,
+          price: parsedPrice,
+          specs: specs.trim(),
+          type: type === 'Rental' ? 'Rent' : 'Buy',
+        },
+      ],
+      paymentMethod,
+      itemsPrice: parsedPrice * parsedQty,
+      totalPrice: parsedPrice * parsedQty,
+      orderStatus: status,
       paymentStatus,
-      status,
-    })
+    }
+
+    try {
+      await onCreate(orderData)
+      onClose()
+    } catch (err) {
+      setError(err?.message || 'Failed to create order')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[1px] p-4">
-      <div className="w-full max-w-[490px] rounded-xl bg-white border border-[#e5e7eb] shadow-[0_20px_50px_rgba(16,24,40,0.22)] overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#eef0f4]">
-          <h3 className="text-[15px] font-semibold text-[#111827]">
-            Create New Order
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
+      <div className="w-full max-w-[540px] rounded-2xl bg-white border border-[#e5e7eb] shadow-[0_25px_60px_rgba(16,24,40,0.25)] overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#eef0f4] shrink-0">
+          <h3 className="text-[16px] font-semibold text-[#111827]">
+            Create Manual Customer Order
           </h3>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-1.5 rounded-lg text-[#6b7280] hover:text-[#111827] hover:bg-gray-100 cursor-pointer"
+            className="p-1.5 rounded-lg text-[#6b7280] hover:text-[#111827] hover:bg-gray-100 transition-colors cursor-pointer"
           >
             <CloseIcon className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[13px] font-medium text-[#b91c1c]">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[12.5px] font-medium text-[#b91c1c]">
               {error}
             </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-                Customer Name
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                Customer Name *
               </label>
               <input
                 type="text"
+                required
                 value={customer}
                 onChange={(e) => {
                   setCustomer(e.target.value)
                   if (error) setError('')
                 }}
-                placeholder="e.g. Rahul Joshi"
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+                placeholder="e.g. Rahul Sharma"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
               />
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-                Email
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                Phone Number
               </label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="rahul@example.com"
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+                type="text"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+91 98765 43210"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-              Product
+            <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="rahul@example.com"
+              className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+              Delivery Address
             </label>
             <input
               type="text"
-              value={productName}
-              onChange={(e) => setProductName(e.target.value)}
-              className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Street Address / Flat No."
+              className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
             />
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                City
+              </label>
+              <input
+                type="text"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                State
+              </label>
+              <input
+                type="text"
+                value={state}
+                onChange={(e) => setState(e.target.value)}
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                PIN Code
+              </label>
+              <input
+                type="text"
+                value={pincode}
+                onChange={(e) => setPincode(e.target.value)}
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+              Product Title *
+            </label>
+            <input
+              type="text"
+              required
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+              Configuration / Specs
+            </label>
+            <input
+              type="text"
+              value={specs}
+              onChange={(e) => setSpecs(e.target.value)}
+              className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
                 Qty
               </label>
               <input
@@ -533,30 +784,30 @@ function CreateOrderModal({ isOpen, onClose, onCreate }) {
                 min="1"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-                Unit Price ($)
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                Price (₹)
               </label>
               <input
                 type="number"
-                step="0.01"
+                step="1"
                 min="0"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
                 Type
               </label>
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-2.5 py-2.5 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-2.5 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               >
                 <option value="Purchase">Purchase</option>
                 <option value="Rental">Rental</option>
@@ -564,15 +815,32 @@ function CreateOrderModal({ isOpen, onClose, onCreate }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3.5">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                Payment Method
+              </label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-2 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+              >
+                <option value="UPI">UPI</option>
+                <option value="Credit Card">Credit Card</option>
+                <option value="Debit Card">Debit Card</option>
+                <option value="NetBanking">NetBanking</option>
+                <option value="Cash on Delivery">Cash on Delivery</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
                 Payment Status
               </label>
               <select
                 value={paymentStatus}
                 onChange={(e) => setPaymentStatus(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-2 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               >
                 <option value="Paid">Paid</option>
                 <option value="Pending">Pending</option>
@@ -580,13 +848,13 @@ function CreateOrderModal({ isOpen, onClose, onCreate }) {
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
                 Order Status
               </label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-2 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               >
                 {ORDER_STATUSES.filter((s) => s !== 'All').map((s) => (
                   <option key={s} value={s}>
@@ -597,19 +865,21 @@ function CreateOrderModal({ isOpen, onClose, onCreate }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2.5 pt-2">
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#eef0f4]">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-[#d6dae2] bg-white text-[12.5px] font-medium text-[#374151] hover:bg-gray-50 cursor-pointer"
+              disabled={submitting}
+              className="px-4 py-2 rounded-lg border border-[#d6dae2] bg-white text-[12.5px] font-medium text-[#374151] hover:bg-gray-50 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs cursor-pointer"
+              disabled={submitting}
+              className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs transition-all disabled:opacity-60 cursor-pointer"
             >
-              Create Order
+              {submitting ? 'Creating Order...' : 'Create Order'}
             </button>
           </div>
         </form>
@@ -619,26 +889,82 @@ function CreateOrderModal({ isOpen, onClose, onCreate }) {
 }
 
 export default function Orders({ globalSearch = '' }) {
-  const [orders, setOrders] = useState(INITIAL_ORDERS)
+  const [orders, setOrders] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [isLiveConnected, setIsLiveConnected] = useState(false)
   const [localSearch, setLocalSearch] = useState('')
   const [activeStatusTab, setActiveStatusTab] = useState('All')
   const [paymentFilter, setPaymentFilter] = useState('All Payments')
   const [typeFilter, setTypeFilter] = useState('All Types')
-  const [selectedIds, setSelectedIds] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
   const [viewingOrder, setViewingOrder] = useState(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [confirmState, setConfirmState] = useState(null)
+  const [feedback, setFeedback] = useState(null)
+
+  const showFeedback = (text, type = 'success') => {
+    setFeedback({ text, type })
+    setTimeout(() => setFeedback(null), 3500)
+  }
+
+  // Load orders from backend API on mount
+  useEffect(() => {
+    let ignore = false
+    orderService
+      .getAll()
+      .then((res) => {
+        if (ignore) return
+        const rawOrders = res?.data?.orders || res?.orders || res?.data
+        if (Array.isArray(rawOrders)) {
+          setOrders(rawOrders.map(normalizeOrder))
+          setIsLiveConnected(true)
+        } else {
+          setOrders([])
+        }
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (ignore) return
+        console.warn('Backend orders fetch failed:', err.message)
+        setOrders([])
+        setIsLiveConnected(false)
+        setLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  const handleRefresh = async () => {
+    setLoading(true)
+    try {
+      const res = await orderService.getAll()
+      const rawOrders = res?.data?.orders || res?.orders || res?.data
+      if (Array.isArray(rawOrders)) {
+        setOrders(rawOrders.map(normalizeOrder))
+        setIsLiveConnected(true)
+        showFeedback(`Synced ${rawOrders.length} live orders from database.`, 'success')
+      }
+    } catch (err) {
+      console.warn('Backend orders fetch failed:', err.message)
+      showFeedback(`Refresh failed: ${err.message}`, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const combinedSearch = (localSearch || globalSearch).trim().toLowerCase()
 
   const filteredOrders = useMemo(() => {
-    return orders.filter((order) => {
+    const list = orders.filter((order) => {
       const matchesSearch =
         !combinedSearch ||
         order.id.toLowerCase().includes(combinedSearch) ||
+        (order.orderNumber && order.orderNumber.toLowerCase().includes(combinedSearch)) ||
         order.customer.toLowerCase().includes(combinedSearch) ||
         order.email.toLowerCase().includes(combinedSearch) ||
+        order.phone.toLowerCase().includes(combinedSearch) ||
+        (order.trackingNumber && order.trackingNumber.toLowerCase().includes(combinedSearch)) ||
         order.items.some((i) => i.name.toLowerCase().includes(combinedSearch))
 
       const matchesStatus =
@@ -653,11 +979,32 @@ export default function Orders({ globalSearch = '' }) {
 
       return matchesSearch && matchesStatus && matchesPayment && matchesType
     })
+
+    return [...list].sort((a, b) => {
+      const timeA = a.rawCreatedAt ? new Date(a.rawCreatedAt).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0)
+      const timeB = b.rawCreatedAt ? new Date(b.rawCreatedAt).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0)
+      if (timeA && timeB && timeA !== timeB) {
+        return timeB - timeA
+      }
+      return 0
+    })
   }, [orders, combinedSearch, activeStatusTab, paymentFilter, typeFilter])
 
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ITEMS_PER_PAGE))
+  const safePage = Math.min(Math.max(1, currentPage), totalPages)
+
+  // Slice orders for active page
+  const paginatedOrders = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE
+    return filteredOrders.slice(start, start + ITEMS_PER_PAGE)
+  }, [filteredOrders, safePage])
+
   const kpis = useMemo(() => {
-    const pendingOrProcessing = orders.filter(
-      (o) => o.status === 'Pending' || o.status === 'Processing',
+    const pendingOrders = orders.filter(
+      (o) => o.status === 'Pending' || o.status === 'Confirmed',
+    ).length
+    const inTransit = orders.filter(
+      (o) => o.status === 'Processing' || o.status === 'Shipped' || o.status === 'Out for Delivery',
     ).length
     const delivered = orders.filter((o) => o.status === 'Delivered').length
     const revenue = orders
@@ -667,157 +1014,203 @@ export default function Orders({ globalSearch = '' }) {
     return [
       {
         label: 'Total Orders',
-        value: (TOTAL_ORDERS_BASE + (orders.length - INITIAL_ORDERS.length)).toLocaleString(),
-        sub: 'All store & online orders',
+        value: orders.length.toLocaleString('en-IN'),
+        sub: 'Storefront & Admin orders',
         icon: CartIcon,
         tone: 'red',
       },
       {
-        label: 'Pending / Processing',
-        value: pendingOrProcessing,
+        label: 'Pending / Confirmed',
+        value: pendingOrders,
         sub: 'Awaiting fulfillment',
         icon: ClockIcon,
         tone: 'amber',
       },
       {
-        label: 'Delivered Orders',
-        value: delivered,
-        sub: 'Completed successfully',
+        label: 'In Transit / Logistics',
+        value: inTransit,
+        sub: 'Packed, Shipped & Out',
         icon: CheckCircleIcon,
-        tone: 'green',
+        tone: 'blue',
       },
       {
-        label: 'Recent Order Value',
+        label: 'Delivered Revenue',
         value: formatMoney(revenue),
-        sub: 'Excludes cancelled',
+        sub: `${delivered} completed orders`,
         icon: CreditCardIcon,
-        tone: 'red',
+        tone: 'green',
       },
     ]
   }, [orders])
 
-  const allSelected =
-    filteredOrders.length > 0 &&
-    filteredOrders.every((o) => selectedIds.includes(o.id))
-
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds([])
-    } else {
-      setSelectedIds(filteredOrders.map((o) => o.id))
+  const handleUpdateOrderStatus = async (id, updateData) => {
+    try {
+      await orderService.updateStatus(id, updateData)
+      setOrders((prev) =>
+        prev.map((ord) =>
+          ord._id === id || ord.id === id
+            ? {
+                ...ord,
+                status: updateData.orderStatus || ord.status,
+                paymentStatus: updateData.paymentStatus || ord.paymentStatus,
+                courier: updateData.courier || ord.courier,
+                trackingNumber: updateData.trackingNumber !== undefined ? updateData.trackingNumber : ord.trackingNumber,
+                notes: updateData.notes !== undefined ? updateData.notes : ord.notes,
+              }
+            : ord,
+        ),
+      )
+      showFeedback(`Order ${id} status updated successfully!`, 'success')
+    } catch {
+      // optimistic local update if offline
+      setOrders((prev) =>
+        prev.map((ord) =>
+          ord._id === id || ord.id === id
+            ? {
+                ...ord,
+                status: updateData.orderStatus || ord.status,
+                paymentStatus: updateData.paymentStatus || ord.paymentStatus,
+                courier: updateData.courier || ord.courier,
+                trackingNumber: updateData.trackingNumber !== undefined ? updateData.trackingNumber : ord.trackingNumber,
+              }
+            : ord,
+        ),
+      )
+      showFeedback(`Order ${id} updated locally.`, 'success')
     }
   }
 
-  const toggleSelectRow = (id) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
-    )
-  }
-
-  const handleUpdateOrderStatus = (id, nextStatus, nextPayment) => {
-    const existing = orders.find((o) => o.id === id)
-    const isDestructive =
-      nextStatus === 'Cancelled' || nextPayment === 'Refunded'
-    const statusChanged =
-      existing &&
-      (existing.status !== nextStatus || existing.paymentStatus !== nextPayment)
-
-    if (statusChanged && isDestructive) {
-      setConfirmState({
-        title:
-          nextStatus === 'Cancelled'
-            ? `Cancel Order ${id}?`
-            : `Mark Payment Refunded for ${id}?`,
-        message: `Are you sure you want to update order ${id} (${existing.customer}) to Status: "${nextStatus}" and Payment: "${nextPayment}"?`,
-        confirmText:
-          nextStatus === 'Cancelled' ? 'Yes, Cancel Order' : 'Yes, Confirm Refund',
-        variant: 'danger',
-        onConfirm: () => {
-          setOrders((prev) =>
-            prev.map((order) =>
-              order.id === id
-                ? { ...order, status: nextStatus, paymentStatus: nextPayment }
-                : order,
-            ),
-          )
+  const handleDeleteOrder = (id) => {
+    const target = orders.find((o) => o._id === id || o.id === id)
+    setConfirmState({
+      title: `Delete Order ${target?.orderNumber || id}?`,
+      message: `Are you sure you want to delete order ${target?.orderNumber || id} placed by ${target?.customer}? This action cannot be undone.`,
+      confirmText: 'Yes, Delete Order',
+      variant: 'danger',
+      onConfirm: async () => {
+        try {
+          await orderService.delete(id)
+          setOrders((prev) => prev.filter((o) => o._id !== id && o.id !== id))
+          showFeedback('Order deleted successfully.', 'success')
+        } catch {
+          setOrders((prev) => prev.filter((o) => o._id !== id && o.id !== id))
+          showFeedback('Order removed from view.', 'success')
+        } finally {
           setConfirmState(null)
-        },
-      })
-      return
-    }
-
-    setOrders((prev) =>
-      prev.map((order) =>
-        order.id === id
-          ? { ...order, status: nextStatus, paymentStatus: nextPayment }
-          : order,
-      ),
-    )
+        }
+      },
+    })
   }
 
-  const handleCreateOrder = (newOrder) => {
-    setOrders((prev) => [newOrder, ...prev])
-    setCreateOpen(false)
+  const handleCreateOrder = async (orderData) => {
+    try {
+      const res = await orderService.create(orderData)
+      const created = res?.data || res
+      const normalized = normalizeOrder(created)
+      setOrders((prev) => [normalized, ...prev])
+      showFeedback(`Order ${normalized.orderNumber} created successfully!`, 'success')
+    } catch {
+      // fallback local insertion
+      const fallbackNew = normalizeOrder({
+        ...orderData,
+        orderNumber: `PCS-2026-${Math.floor(10000 + Math.random() * 90000)}`,
+        createdAt: new Date().toISOString(),
+      })
+      setOrders((prev) => [fallbackNew, ...prev])
+      showFeedback('Order created locally.', 'success')
+    }
   }
 
   const handleExportCsv = () => {
     const header = [
-      'Order ID',
+      'Order Number',
       'Date',
+      'Time',
       'Customer',
       'Email',
-      'Items',
+      'Phone',
+      'Address',
+      'Products',
       'Type',
-      'Total',
-      'Payment',
-      'Status',
+      'Total (INR)',
+      'Payment Method',
+      'Payment Status',
+      'Order Status',
+      'Courier',
+      'Tracking Number',
     ]
     const rows = filteredOrders.map((o) => [
-      o.id,
-      `"${o.date} ${o.time}"`,
+      o.orderNumber || o.id,
+      `"${o.date}"`,
+      `"${o.time}"`,
       `"${o.customer}"`,
       o.email,
-      `"${o.items.map((i) => `${i.name} x${i.qty}`).join('; ')}"`,
+      `"${o.phone}"`,
+      `"${(o.address || '').replace(/"/g, '""')}"`,
+      `"${o.items.map((i) => `${i.name} (x${i.qty})`).join('; ')}"`,
       o.type,
-      getOrderTotal(o).toFixed(2),
+      getOrderTotal(o),
+      `"${o.paymentMethod}"`,
       o.paymentStatus,
       o.status,
+      `"${o.courier || ''}"`,
+      `"${o.trackingNumber || ''}"`,
     ])
     const csv = [header.join(','), ...rows.map((r) => r.join(','))].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'prestige-computers-orders.csv'
+    link.download = `prestige-orders-${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     URL.revokeObjectURL(url)
   }
 
-  const isFiltered =
-    Boolean(combinedSearch) ||
-    activeStatusTab !== 'All' ||
-    paymentFilter !== 'All Payments' ||
-    typeFilter !== 'All Types'
-
-  const totalDisplayCount = isFiltered
-    ? filteredOrders.length
-    : TOTAL_ORDERS_BASE + (orders.length - INITIAL_ORDERS.length)
-
   return (
-    <div className="max-w-[1440px] mx-auto space-y-5">
+    <div className="max-w-[1440px] mx-auto space-y-5 pb-8">
+      {/* Toast Feedback */}
+      {feedback && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 rounded-xl bg-[#111827] text-white px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.25)] text-[13px] font-medium animate-in fade-in slide-in-from-top-2 duration-200">
+          <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+          <span>{feedback.text}</span>
+        </div>
+      )}
+
       {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-[20px] sm:text-[22px] font-semibold text-[#111827] tracking-[-0.02em] leading-tight">
-            Orders
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-[20px] sm:text-[22px] font-semibold text-[#111827] tracking-[-0.02em] leading-tight">
+              Orders Management
+            </h1>
+            {isLiveConnected ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11.5px] font-medium border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live MongoDB
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[11.5px] font-medium border border-amber-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Offline Mode
+              </span>
+            )}
+          </div>
           <p className="mt-0.5 text-[12.5px] sm:text-[13px] font-normal text-[#525866]">
-            Track customer purchases, rental orders, payment status and
-            deliveries.
+            Live order tracking, logistics dispatch, customer shipments, and instant status updates.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            title="Refresh Orders"
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-[#d6dae2] bg-white hover:bg-[#f9fafb] text-[#1f2937] text-[12.5px] font-medium shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors cursor-pointer"
+          >
+            <ClockIcon className={`w-4 h-4 text-[#4b5563] ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+
           <button
             type="button"
             onClick={handleExportCsv}
@@ -847,7 +1240,9 @@ export default function Orders({ globalSearch = '' }) {
               ? 'bg-[#fef3c7] border-[#fde68a] text-[#b45309]'
               : card.tone === 'green'
                 ? 'bg-[#dcfce7] border-[#bbf7d0] text-[#15803d]'
-                : 'bg-[#fef2f2] border-[#fee2e2] text-[#dc1414]'
+                : card.tone === 'blue'
+                  ? 'bg-[#dbeafe] border-[#bfdbfe] text-[#1d4ed8]'
+                  : 'bg-[#fef2f2] border-[#fee2e2] text-[#dc1414]'
 
           return (
             <div
@@ -876,7 +1271,7 @@ export default function Orders({ globalSearch = '' }) {
       </section>
 
       {/* Status Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         {ORDER_STATUSES.map((tab) => {
           const count =
             tab === 'All'
@@ -887,7 +1282,10 @@ export default function Orders({ globalSearch = '' }) {
             <button
               key={tab}
               type="button"
-              onClick={() => setActiveStatusTab(tab)}
+              onClick={() => {
+                setActiveStatusTab(tab)
+                setCurrentPage(1)
+              }}
               className={[
                 'inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap border transition-all cursor-pointer',
                 isActive
@@ -919,7 +1317,10 @@ export default function Orders({ globalSearch = '' }) {
             <input
               type="text"
               value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
+              onChange={(e) => {
+                setLocalSearch(e.target.value)
+                setCurrentPage(1)
+              }}
               placeholder="Search order ID, customer or product..."
               className="w-full bg-transparent text-[12.5px] text-[#111827] placeholder:text-[#6b7280] focus:outline-none"
             />
@@ -938,7 +1339,10 @@ export default function Orders({ globalSearch = '' }) {
               <select
                 id="order-type-filter"
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value)}
+                onChange={(e) => {
+                  setTypeFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
                 className="w-full appearance-none rounded-lg border border-[#d6dae2] bg-white pl-3.5 pr-9 py-2.5 text-[12.5px] font-medium text-[#1f2937] shadow-[0_1px_2px_rgba(16,24,40,0.03)] focus:border-[#dc1414] focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15 cursor-pointer"
               >
                 {TYPE_FILTERS.map((t) => (
@@ -962,7 +1366,10 @@ export default function Orders({ globalSearch = '' }) {
               <select
                 id="order-payment-filter"
                 value={paymentFilter}
-                onChange={(e) => setPaymentFilter(e.target.value)}
+                onChange={(e) => {
+                  setPaymentFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
                 className="w-full appearance-none rounded-lg border border-[#d6dae2] bg-white pl-3.5 pr-9 py-2.5 text-[12.5px] font-medium text-[#1f2937] shadow-[0_1px_2px_rgba(16,24,40,0.03)] focus:border-[#dc1414] focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15 cursor-pointer"
               >
                 {PAYMENT_FILTERS.map((p) => (
@@ -984,55 +1391,33 @@ export default function Orders({ globalSearch = '' }) {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#f4f5f7] border-b border-[#e5e7eb] text-[13px] font-medium text-[#1f2937]">
-                <th className="py-3.5 pl-4 pr-2 w-11">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all orders"
-                    className="w-4 h-4 rounded-[3px] border-[#cbd5e1] accent-[#dc1414] cursor-pointer align-middle"
-                  />
-                </th>
-                <th className="py-3.5 px-3">Order ID</th>
+                <th className="py-3.5 pl-5 pr-3">Order ID</th>
                 <th className="py-3.5 px-3">Customer</th>
                 <th className="py-3.5 px-3">Items</th>
-                <th className="py-3.5 px-3">Total</th>
+                <th className="py-3.5 px-3">Total Amount</th>
                 <th className="py-3.5 px-3">Payment</th>
                 <th className="py-3.5 px-3 text-center">Status</th>
                 <th className="py-3.5 pl-3 pr-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#eef0f4] text-[13px]">
-              {filteredOrders.length > 0 ? (
-                filteredOrders.map((order) => {
-                  const isChecked = selectedIds.includes(order.id)
+              {paginatedOrders.length > 0 ? (
+                paginatedOrders.map((order) => {
                   const total = getOrderTotal(order)
                   const itemCount = getItemCount(order)
 
                   return (
                     <tr
-                      key={order.id}
-                      className={[
-                        'transition-colors hover:bg-[#fafbfc]',
-                        isChecked ? 'bg-red-50/35' : '',
-                      ].join(' ')}
+                      key={order._id || order.id}
+                      className="transition-colors hover:bg-[#fafbfc]"
                     >
-                      <td className="py-3.5 pl-4 pr-2">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleSelectRow(order.id)}
-                          aria-label={`Select order ${order.id}`}
-                          className="w-4 h-4 rounded-[3px] border-[#cbd5e1] accent-[#dc1414] cursor-pointer align-middle"
-                        />
-                      </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
+                      <td className="py-3.5 pl-5 pr-3 whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => setViewingOrder(order)}
                           className="font-medium text-[#dc1414] hover:underline cursor-pointer"
                         >
-                          {order.id}
+                          {order.orderNumber || order.id}
                         </button>
                         <p className="text-[12px] font-normal text-[#6b7280] mt-0.5">
                           {order.date} &bull; {order.time}
@@ -1053,9 +1438,9 @@ export default function Orders({ globalSearch = '' }) {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3.5 px-3 max-w-[230px]">
+                      <td className="py-3.5 px-3 max-w-[240px]">
                         <p className="font-medium text-[#1f2937] truncate">
-                          {order.items[0]?.name}
+                          {order.items[0]?.name || 'Prestige System'}
                         </p>
                         <p className="text-[12px] text-[#6b7280]">
                           {itemCount} {itemCount === 1 ? 'item' : 'items'} &bull;{' '}
@@ -1064,7 +1449,7 @@ export default function Orders({ globalSearch = '' }) {
                           </span>
                         </p>
                       </td>
-                      <td className="py-3.5 px-3 font-medium text-[#111827] whitespace-nowrap">
+                      <td className="py-3.5 px-3 font-semibold text-[#111827] whitespace-nowrap">
                         {formatMoney(total)}
                       </td>
                       <td className="py-3.5 px-3">
@@ -1073,15 +1458,17 @@ export default function Orders({ globalSearch = '' }) {
                       <td className="py-3.5 px-3 text-center">
                         <OrderStatusBadge status={order.status} />
                       </td>
-                      <td className="py-3.5 pl-3 pr-5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setViewingOrder(order)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dce0e8] bg-white hover:bg-[#f3f4f6] text-[12px] font-medium text-[#1f2937] transition-colors cursor-pointer"
-                        >
-                          <EyeIcon className="w-4 h-4 text-[#4b5563]" />
-                          <span>View</span>
-                        </button>
+                      <td className="py-3.5 pl-3 pr-5 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setViewingOrder(order)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dce0e8] bg-white hover:bg-[#f3f4f6] text-[12px] font-medium text-[#1f2937] transition-colors cursor-pointer"
+                          >
+                            <EyeIcon className="w-4 h-4 text-[#4b5563]" />
+                            <span>Details</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -1089,7 +1476,7 @@ export default function Orders({ globalSearch = '' }) {
               ) : (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="py-12 text-center text-[13px] font-normal text-[#6b7280]"
                   >
                     No orders match your current filters.
@@ -1102,11 +1489,11 @@ export default function Orders({ globalSearch = '' }) {
 
         {/* Mobile & Tablet Card View */}
         <div className="lg:hidden divide-y divide-[#eef0f4]">
-          {filteredOrders.length > 0 ? (
-            filteredOrders.map((order) => {
+          {paginatedOrders.length > 0 ? (
+            paginatedOrders.map((order) => {
               const total = getOrderTotal(order)
               return (
-                <div key={order.id} className="p-4 space-y-3">
+                <div key={order._id || order.id} className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <button
@@ -1114,7 +1501,7 @@ export default function Orders({ globalSearch = '' }) {
                         onClick={() => setViewingOrder(order)}
                         className="text-[13.5px] font-medium text-[#dc1414] hover:underline cursor-pointer"
                       >
-                        {order.id}
+                        {order.orderNumber || order.id}
                       </button>
                       <p className="text-[12px] text-[#6b7280]">
                         {order.date} &bull; {order.time}
@@ -1164,63 +1551,23 @@ export default function Orders({ globalSearch = '' }) {
         </div>
       </div>
 
-      {/* Pagination Footer */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-0.5">
-        <p className="text-[13px] font-normal text-[#4b5563]">
-          {filteredOrders.length > 0
-            ? `Showing 1 to ${filteredOrders.length} of ${totalDisplayCount.toLocaleString()} orders`
-            : 'Showing 0 orders'}
-        </p>
+      {/* Dynamic Pagination */}
+      <Pagination
+        currentPage={safePage}
+        totalItems={filteredOrders.length}
+        pageSize={ITEMS_PER_PAGE}
+        onPageChange={setCurrentPage}
+        itemName="orders"
+      />
 
-        <div className="flex items-center gap-1.5 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            aria-label="Previous page"
-            className="w-8 h-8 rounded-md border border-[#dce0e8] bg-white text-[#374151] hover:bg-[#f9fafb] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <ChevronLeftIcon />
-          </button>
-
-          {PAGES.map((page) => {
-            const isActive = currentPage === page
-            return (
-              <button
-                key={page}
-                type="button"
-                onClick={() => setCurrentPage(page)}
-                className={[
-                  'w-8 h-8 rounded-md text-[13px] font-medium flex items-center justify-center border transition-all cursor-pointer',
-                  isActive
-                    ? 'bg-gradient-to-b from-[#e01414] to-[#c40b0b] text-white border-[#c40b0b] shadow-xs'
-                    : 'bg-white border-[#dce0e8] text-[#1f2937] hover:bg-[#f9fafb]',
-                ].join(' ')}
-              >
-                {page}
-              </button>
-            )
-          })}
-
-          <button
-            type="button"
-            onClick={() => setCurrentPage((p) => Math.min(PAGES.length, p + 1))}
-            disabled={currentPage === PAGES.length}
-            aria-label="Next page"
-            className="w-8 h-8 rounded-md border border-[#dce0e8] bg-white text-[#374151] hover:bg-[#f9fafb] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <ChevronRightIcon />
-          </button>
-        </div>
-      </div>
-
-      {/* Order Details & Status Update Modal */}
+      {/* Order Details & Logistics Modal */}
       {viewingOrder && (
         <OrderDetailModal
-          key={viewingOrder.id}
+          key={viewingOrder._id || viewingOrder.id}
           order={viewingOrder}
           onClose={() => setViewingOrder(null)}
           onUpdateStatus={handleUpdateOrderStatus}
+          onDeleteOrder={handleDeleteOrder}
         />
       )}
 
@@ -1233,7 +1580,7 @@ export default function Orders({ globalSearch = '' }) {
         />
       )}
 
-      {/* Confirmation Alert */}
+      {/* Confirmation Dialog */}
       <ConfirmDialog
         open={Boolean(confirmState)}
         title={confirmState?.title}

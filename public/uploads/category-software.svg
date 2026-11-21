@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="softGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="50%" stop-color="#0369a1" />
+      <stop offset="100%" stop-color="#0c4a6e" />
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22c55e" />
+      <stop offset="100%" stop-color="#16a34a" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.15" />
+    </filter>
+  </defs>
+  <!-- Box Spine/Side -->
+  <polygon points="32,22 44,14 44,94 32,102" fill="#075985" filter="url(#shadow)" />
+  <!-- Box Front -->
+  <polygon points="44,14 88,26 88,106 44,94" fill="url(#softGrad)" filter="url(#shadow)" />
+  <!-- Software Window Icon on Box -->
+  <rect x="52" y="38" width="12" height="12" rx="1.5" fill="#38bdf8" fill-opacity="0.9" />
+  <rect x="68" y="38" width="12" height="12" rx="1.5" fill="#38bdf8" fill-opacity="0.9" />
+  <rect x="52" y="54" width="12" height="12" rx="1.5" fill="#38bdf8" fill-opacity="0.9" />
+  <rect x="68" y="54" width="12" height="12" rx="1.5" fill="#38bdf8" fill-opacity="0.9" />
+  <!-- Security / Genuine Shield Badge -->
+  <circle cx="82" cy="84" r="14" fill="#ffffff" filter="url(#shadow)" />
+  <path d="M82,74 L92,78 C92,86 86,92 82,94 C78,92 72,86 72,78 Z" fill="url(#shieldGrad)" />
+  <polyline points="78,84 81,87 86,81" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

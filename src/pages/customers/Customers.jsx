@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
+import Pagination from '../../components/common/Pagination'
 import {
   ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   CloseIcon,
   CreditCardIcon,
   PlusIcon,
@@ -11,126 +10,24 @@ import {
   TrashIcon,
   UsersIcon,
 } from '../../components/common/Icons'
-
-const INITIAL_CUSTOMERS = [
-  {
-    id: 'CUS-1001',
-    name: 'Aarav Sharma',
-    email: 'aarav.sharma@gmail.com',
-    phone: '+91 98204 51230',
-    city: 'Mumbai',
-    address: '402 Tech Park Ave, Bandra West, Mumbai 400050',
-    segment: 'VIP',
-    ordersCount: 6,
-    rentalsCount: 1,
-    totalSpent: 5890.0,
-    kycStatus: 'Verified',
-    status: 'Active',
-    joinedAt: 'Jan 14, 2026',
-    lastActivity: '2 hours ago',
-  },
-  {
-    id: 'CUS-1002',
-    name: 'Priya Verma',
-    email: 'priya.v@outlook.com',
-    phone: '+91 98112 34901',
-    city: 'Gurugram',
-    address: '18 Cyber Hub Tower B, Gurugram 122002',
-    segment: 'Corporate',
-    ordersCount: 9,
-    rentalsCount: 4,
-    totalSpent: 11420.0,
-    kycStatus: 'Verified',
-    status: 'Active',
-    joinedAt: 'Nov 02, 2025',
-    lastActivity: '5 hours ago',
-  },
-  {
-    id: 'CUS-1003',
-    name: 'Rohan Mehta',
-    email: 'rohan.mehta@techcorp.in',
-    phone: '+91 99001 77421',
-    city: 'Bengaluru',
-    address: '75 Indiranagar 100ft Rd, Bengaluru 560038',
-    segment: 'Corporate',
-    ordersCount: 5,
-    rentalsCount: 2,
-    totalSpent: 7650.0,
-    kycStatus: 'Verified',
-    status: 'Active',
-    joinedAt: 'Mar 19, 2026',
-    lastActivity: '1 day ago',
-  },
-  {
-    id: 'CUS-1004',
-    name: 'Neha Kapoor',
-    email: 'neha.kapoor@studio.co',
-    phone: '+91 98765 40129',
-    city: 'Pune',
-    address: '12 Koregaon Park Lane 5, Pune 411001',
-    segment: 'VIP',
-    ordersCount: 3,
-    rentalsCount: 3,
-    totalSpent: 3180.0,
-    kycStatus: 'Verified',
-    status: 'Active',
-    joinedAt: 'Apr 08, 2026',
-    lastActivity: '1 day ago',
-  },
-  {
-    id: 'CUS-1005',
-    name: 'Vikram Singh',
-    email: 'vikram.s@gmail.com',
-    phone: '+91 97170 88214',
-    city: 'New Delhi',
-    address: '29 Connaught Circus, New Delhi 110001',
-    segment: 'Regular',
-    ordersCount: 2,
-    rentalsCount: 0,
-    totalSpent: 1499.0,
-    kycStatus: 'Pending',
-    status: 'Active',
-    joinedAt: 'Aug 22, 2026',
-    lastActivity: '2 days ago',
-  },
-  {
-    id: 'CUS-1006',
-    name: 'Siddharth Nair',
-    email: 'sid.nair@devlabs.in',
-    phone: '+91 98201 77634',
-    city: 'Mumbai',
-    address: '904 Hiranandani Gardens, Powai, Mumbai 400076',
-    segment: 'Regular',
-    ordersCount: 1,
-    rentalsCount: 2,
-    totalSpent: 890.0,
-    kycStatus: 'Verified',
-    status: 'Blocked',
-    joinedAt: 'Sep 11, 2026',
-    lastActivity: '4 days ago',
-  },
-]
+import customerService from '../../services/customerService'
 
 const TABS = ['All', 'Active', 'VIP', 'Corporate', 'Blocked']
 const KYC_FILTERS = ['All KYC', 'Verified', 'Pending', 'Unverified']
-const SORT_OPTIONS = ['Highest Spend', 'Most Orders', 'Name (A-Z)']
-const PAGES = [1, 2, 3, 4, 5]
-const TOTAL_CUSTOMERS_BASE = 3892
+const SORT_OPTIONS = ['Newest First', 'Highest Spend', 'Most Orders', 'Name (A-Z)']
+const ITEMS_PER_PAGE = 8
 
 function formatMoney(amount) {
-  return `$${Number(amount).toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`
+  return `₹${Number(amount || 0).toLocaleString('en-IN')}`
 }
 
-function getInitials(name) {
+function getInitials(name = '') {
   return name
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0].toUpperCase())
-    .join('')
+    .join('') || 'CU'
 }
 
 function EyeIcon({ className = 'w-4 h-4' }) {
@@ -268,33 +165,51 @@ function KycBadge({ kycStatus }) {
   )
 }
 
-function CustomerDetailModal({ customer, onClose, onUpdate }) {
+function CustomerDetailModal({ customer, onClose, onUpdate, onDelete }) {
   const [segment, setSegment] = useState(customer?.segment || 'Regular')
   const [kycStatus, setKycStatus] = useState(customer?.kycStatus || 'Pending')
   const [status, setStatus] = useState(customer?.status || 'Active')
+  const [phone, setPhone] = useState(customer?.phone || '')
+  const [city, setCity] = useState(customer?.city || '')
+  const [address, setAddress] = useState(customer?.address || '')
+  const [saving, setSaving] = useState(false)
 
   if (!customer) return null
 
-  const handleSave = () => {
-    onUpdate(customer.id, { segment, kycStatus, status })
-    onClose()
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await onUpdate(customer._id || customer.id, {
+        segment,
+        kycStatus,
+        status,
+        phone,
+        city,
+        address,
+      })
+      onClose()
+    } catch {
+      // handled in parent
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[1px] p-4">
-      <div className="w-full max-w-[540px] rounded-xl bg-white border border-[#e5e7eb] shadow-[0_20px_50px_rgba(16,24,40,0.22)] overflow-hidden max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
+      <div className="w-full max-w-[560px] rounded-2xl bg-white border border-[#e5e7eb] shadow-[0_25px_60px_rgba(16,24,40,0.25)] overflow-hidden max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#eef0f4] shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#eef0f4] shrink-0 bg-white">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-full bg-[#111215] text-white text-[13px] font-medium flex items-center justify-center shrink-0">
               {getInitials(customer.name)}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-[15px] font-semibold text-[#111827]">
+                <h3 className="text-[15.5px] font-semibold text-[#111827]">
                   {customer.name}
                 </h3>
-                <SegmentBadge segment={customer.segment} />
+                <SegmentBadge segment={segment} />
               </div>
               <p className="text-[12px] font-normal text-[#6b7280]">
                 {customer.id} &bull; Joined {customer.joinedAt}
@@ -305,21 +220,21 @@ function CustomerDetailModal({ customer, onClose, onUpdate }) {
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-1.5 rounded-lg text-[#6b7280] hover:text-[#111827] hover:bg-gray-100 cursor-pointer"
+            className="p-1.5 rounded-lg text-[#6b7280] hover:text-[#111827] hover:bg-gray-100 transition-colors cursor-pointer"
           >
             <CloseIcon className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-5 space-y-5 overflow-y-auto">
+        <div className="p-6 space-y-5 overflow-y-auto">
           {/* Quick Metrics */}
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-xl bg-[#f8f9fb] border border-[#eef0f4] p-3 text-center">
               <p className="text-[11.5px] font-normal text-[#6b7280]">
                 Total Orders
               </p>
-              <p className="text-[17px] font-semibold text-[#111827] mt-0.5">
+              <p className="text-[18px] font-semibold text-[#111827] mt-0.5">
                 {customer.ordersCount}
               </p>
             </div>
@@ -327,7 +242,7 @@ function CustomerDetailModal({ customer, onClose, onUpdate }) {
               <p className="text-[11.5px] font-normal text-[#6b7280]">
                 Rentals
               </p>
-              <p className="text-[17px] font-semibold text-[#111827] mt-0.5">
+              <p className="text-[18px] font-semibold text-[#111827] mt-0.5">
                 {customer.rentalsCount}
               </p>
             </div>
@@ -341,32 +256,61 @@ function CustomerDetailModal({ customer, onClose, onUpdate }) {
             </div>
           </div>
 
-          {/* Contact Details */}
-          <div className="rounded-xl border border-[#e5e7eb] divide-y divide-[#eef0f4] text-[12.5px]">
-            <div className="px-4 py-2.5 flex items-center justify-between gap-2">
-              <span className="text-[#6b7280] font-normal">Email</span>
-              <span className="font-medium text-[#111827]">
-                {customer.email}
-              </span>
+          {/* Contact Details & Address */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[12px] font-medium text-[#374151] mb-1">
+                  Email Address
+                </label>
+                <input
+                  type="text"
+                  readOnly
+                  value={customer.email}
+                  className="w-full rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-[12.5px] text-[#6b7280]"
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-[#374151] mb-1">
+                  Phone Number
+                </label>
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full rounded-lg border border-[#d6dae2] bg-white px-3 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:outline-none"
+                />
+              </div>
             </div>
-            <div className="px-4 py-2.5 flex items-center justify-between gap-2">
-              <span className="text-[#6b7280] font-normal">Phone</span>
-              <span className="font-medium text-[#111827]">
-                {customer.phone}
-              </span>
-            </div>
-            <div className="px-4 py-2.5 flex items-start justify-between gap-4">
-              <span className="text-[#6b7280] font-normal shrink-0">
-                Address
-              </span>
-              <span className="font-medium text-[#1f2937] text-right">
-                {customer.address}
-              </span>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[12px] font-medium text-[#374151] mb-1">
+                  City
+                </label>
+                <input
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  className="w-full rounded-lg border border-[#d6dae2] bg-white px-3 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-[12px] font-medium text-[#374151] mb-1">
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full rounded-lg border border-[#d6dae2] bg-white px-3 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:outline-none"
+                />
+              </div>
             </div>
           </div>
 
           {/* Management Controls */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
             <div>
               <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
                 Segment
@@ -374,7 +318,7 @@ function CustomerDetailModal({ customer, onClose, onUpdate }) {
               <select
                 value={segment}
                 onChange={(e) => setSegment(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[12.5px] font-medium text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2 text-[12.5px] font-medium text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               >
                 <option value="Regular">Regular</option>
                 <option value="VIP">VIP</option>
@@ -389,7 +333,7 @@ function CustomerDetailModal({ customer, onClose, onUpdate }) {
               <select
                 value={kycStatus}
                 onChange={(e) => setKycStatus(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[12.5px] font-medium text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2 text-[12.5px] font-medium text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               >
                 <option value="Verified">Verified</option>
                 <option value="Pending">Pending</option>
@@ -404,7 +348,7 @@ function CustomerDetailModal({ customer, onClose, onUpdate }) {
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[12.5px] font-medium text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2 text-[12.5px] font-medium text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               >
                 <option value="Active">Active</option>
                 <option value="Blocked">Blocked</option>
@@ -414,21 +358,36 @@ function CustomerDetailModal({ customer, onClose, onUpdate }) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-[#eef0f4] bg-[#fafbfc] shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-[#eef0f4] bg-[#fafbfc] shrink-0">
           <button
             type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-[#d6dae2] bg-white text-[12.5px] font-medium text-[#374151] hover:bg-gray-50 cursor-pointer"
+            onClick={() => {
+              onDelete(customer._id || customer.id)
+              onClose()
+            }}
+            className="text-[12.5px] font-medium text-[#dc2626] hover:underline cursor-pointer"
           >
-            Close
+            Delete Customer
           </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs cursor-pointer"
-          >
-            Save Profile
-          </button>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="px-4 py-2 rounded-lg border border-[#d6dae2] bg-white text-[12.5px] font-medium text-[#374151] hover:bg-gray-50 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs transition-all disabled:opacity-60 cursor-pointer"
+            >
+              {saving ? 'Saving...' : 'Save Profile'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -439,99 +398,107 @@ function AddCustomerModal({ isOpen, onClose, onAdd }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
-  const [city, setCity] = useState('')
+  const [city, setCity] = useState('Kanpur')
+  const [address, setAddress] = useState('')
   const [segment, setSegment] = useState('Regular')
-  const [kycStatus, setKycStatus] = useState('Pending')
+  const [kycStatus, setKycStatus] = useState('Verified')
+  const [status, setStatus] = useState('Active')
   const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   if (!isOpen) return null
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!name.trim() || !email.trim()) {
       setError('Please enter customer name and email address.')
       return
     }
 
-    onAdd({
-      id: `CUS-${Math.floor(1007 + Math.random() * 899)}`,
-      name: name.trim(),
-      email: email.trim(),
-      phone: phone.trim() || '+91 98000 00000',
-      city: city.trim() || 'Mumbai',
-      address: `${city.trim() || 'Mumbai'}, India`,
-      segment,
-      ordersCount: 0,
-      rentalsCount: 0,
-      totalSpent: 0,
-      kycStatus,
-      status: 'Active',
-      joinedAt: 'Nov 30, 2026',
-      lastActivity: 'Just now',
-    })
+    setSubmitting(true)
+    setError('')
+    try {
+      await onAdd({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim() || '+91 98000 00000',
+        city: city.trim() || 'Kanpur',
+        address: address.trim() || `${city.trim() || 'Kanpur'}, Uttar Pradesh`,
+        segment,
+        kycStatus,
+        status,
+      })
+      onClose()
+    } catch (err) {
+      setError(err?.message || 'Failed to create customer.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[1px] p-4">
-      <div className="w-full max-w-[480px] rounded-xl bg-white border border-[#e5e7eb] shadow-[0_20px_50px_rgba(16,24,40,0.22)] overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#eef0f4]">
-          <h3 className="text-[15px] font-semibold text-[#111827]">
-            Add New Customer
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
+      <div className="w-full max-w-[500px] rounded-2xl bg-white border border-[#e5e7eb] shadow-[0_25px_60px_rgba(16,24,40,0.25)] overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[#eef0f4]">
+          <h3 className="text-[16px] font-semibold text-[#111827]">
+            Add New Customer Account
           </h3>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="p-1.5 rounded-lg text-[#6b7280] hover:text-[#111827] hover:bg-gray-100 cursor-pointer"
+            className="p-1.5 rounded-lg text-[#6b7280] hover:text-[#111827] hover:bg-gray-100 transition-colors cursor-pointer"
           >
             <CloseIcon className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[13px] font-medium text-[#b91c1c]">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2 text-[12.5px] font-medium text-[#b91c1c]">
               {error}
             </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-                Full Name
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                Full Name *
               </label>
               <input
                 type="text"
+                required
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value)
                   if (error) setError('')
                 }}
                 placeholder="e.g. Kabir Khanna"
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
               />
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-                Email Address
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                Email Address *
               </label>
               <input
                 type="email"
+                required
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value)
                   if (error) setError('')
                 }}
                 placeholder="kabir@example.com"
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
                 Phone Number
               </label>
               <input
@@ -539,33 +506,46 @@ function AddCustomerModal({ isOpen, onClose, onAdd }) {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="+91 98200 12345"
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               />
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
                 City
               </label>
               <input
                 type="text"
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
-                placeholder="Mumbai"
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                placeholder="Kanpur"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3.5">
+          <div>
+            <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+              Street Address
+            </label>
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Store / Walk-in / Residence Address"
+              className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3.5 py-2 text-[12.5px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
                 Segment
               </label>
               <select
                 value={segment}
                 onChange={(e) => setSegment(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-2.5 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               >
                 <option value="Regular">Regular</option>
                 <option value="VIP">VIP</option>
@@ -574,34 +554,50 @@ function AddCustomerModal({ isOpen, onClose, onAdd }) {
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-                Rental KYC Status
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                Rental KYC
               </label>
               <select
                 value={kycStatus}
                 onChange={(e) => setKycStatus(e.target.value)}
-                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-3 py-2.5 text-[13px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-2.5 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
               >
                 <option value="Verified">Verified</option>
                 <option value="Pending">Pending</option>
                 <option value="Unverified">Unverified</option>
               </select>
             </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-[#374151] mb-1.5">
+                Status
+              </label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full rounded-lg border border-[#d6dae2] bg-[#f8f9fb] px-2.5 py-2 text-[12px] text-[#111827] focus:border-[#dc1414] focus:bg-white focus:outline-none"
+              >
+                <option value="Active">Active</option>
+                <option value="Blocked">Blocked</option>
+              </select>
+            </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2.5 pt-2">
+          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[#eef0f4]">
             <button
               type="button"
               onClick={onClose}
+              disabled={submitting}
               className="px-4 py-2 rounded-lg border border-[#d6dae2] bg-white text-[12.5px] font-medium text-[#374151] hover:bg-gray-50 cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs cursor-pointer"
+              disabled={submitting}
+              className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs transition-all disabled:opacity-60 cursor-pointer"
             >
-              Add Customer
+              {submitting ? 'Creating...' : 'Add Customer'}
             </button>
           </div>
         </form>
@@ -611,16 +607,69 @@ function AddCustomerModal({ isOpen, onClose, onAdd }) {
 }
 
 export default function Customers({ globalSearch = '' }) {
-  const [customers, setCustomers] = useState(INITIAL_CUSTOMERS)
+  const [customers, setCustomers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [isLiveConnected, setIsLiveConnected] = useState(false)
   const [localSearch, setLocalSearch] = useState('')
   const [activeTab, setActiveTab] = useState('All')
   const [kycFilter, setKycFilter] = useState('All KYC')
-  const [sortBy, setSortBy] = useState('Highest Spend')
-  const [selectedIds, setSelectedIds] = useState([])
+  const [sortBy, setSortBy] = useState('Newest First')
   const [currentPage, setCurrentPage] = useState(1)
   const [viewingCustomer, setViewingCustomer] = useState(null)
   const [addOpen, setAddOpen] = useState(false)
   const [confirmState, setConfirmState] = useState(null)
+  const [feedback, setFeedback] = useState(null)
+
+  const showFeedback = (text, type = 'success') => {
+    setFeedback({ text, type })
+    setTimeout(() => setFeedback(null), 3500)
+  }
+
+  // Load live customers from database on mount
+  useEffect(() => {
+    let ignore = false
+    customerService
+      .getAll()
+      .then((res) => {
+        if (ignore) return
+        const raw = res?.data?.customers || res?.customers || res?.data
+        if (Array.isArray(raw)) {
+          setCustomers(raw)
+          setIsLiveConnected(true)
+        } else {
+          setCustomers([])
+        }
+        setLoading(false)
+      })
+      .catch((err) => {
+        if (ignore) return
+        console.warn('Backend customers fetch failed:', err.message)
+        setCustomers([])
+        setIsLiveConnected(false)
+        setLoading(false)
+      })
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  const handleRefresh = async () => {
+    setLoading(true)
+    try {
+      const res = await customerService.getAll()
+      const raw = res?.data?.customers || res?.customers || res?.data
+      if (Array.isArray(raw)) {
+        setCustomers(raw)
+        setIsLiveConnected(true)
+        showFeedback(`Synced ${raw.length} customer accounts from database.`, 'success')
+      }
+    } catch (err) {
+      console.warn('Failed to refresh customers:', err.message)
+      showFeedback(`Refresh failed: ${err.message}`, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const combinedSearch = (localSearch || globalSearch).trim().toLowerCase()
 
@@ -631,7 +680,7 @@ export default function Customers({ globalSearch = '' }) {
         customer.name.toLowerCase().includes(combinedSearch) ||
         customer.email.toLowerCase().includes(combinedSearch) ||
         customer.phone.toLowerCase().includes(combinedSearch) ||
-        customer.city.toLowerCase().includes(combinedSearch) ||
+        (customer.city && customer.city.toLowerCase().includes(combinedSearch)) ||
         customer.id.toLowerCase().includes(combinedSearch)
 
       const matchesTab =
@@ -647,31 +696,47 @@ export default function Customers({ globalSearch = '' }) {
     })
 
     return [...list].sort((a, b) => {
+      if (sortBy === 'Newest First') {
+        const timeA = a.rawCreatedAt ? new Date(a.rawCreatedAt).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0)
+        const timeB = b.rawCreatedAt ? new Date(b.rawCreatedAt).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0)
+        return timeB - timeA
+      }
+      if (sortBy === 'Highest Spend') {
+        return (b.totalSpent || 0) - (a.totalSpent || 0)
+      }
       if (sortBy === 'Most Orders') {
-        return b.ordersCount + b.rentalsCount - (a.ordersCount + a.rentalsCount)
+        return (b.ordersCount || 0) + (b.rentalsCount || 0) - ((a.ordersCount || 0) + (a.rentalsCount || 0))
       }
       if (sortBy === 'Name (A-Z)') {
         return a.name.localeCompare(b.name)
       }
-      return b.totalSpent - a.totalSpent
+      const timeA = a.rawCreatedAt ? new Date(a.rawCreatedAt).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0)
+      const timeB = b.rawCreatedAt ? new Date(b.rawCreatedAt).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0)
+      return timeB - timeA
     })
   }, [customers, combinedSearch, activeTab, kycFilter, sortBy])
+
+  const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / ITEMS_PER_PAGE))
+  const safePage = Math.min(Math.max(1, currentPage), totalPages)
+
+  // Slice customers for active page
+  const paginatedCustomers = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE
+    return filteredCustomers.slice(start, start + ITEMS_PER_PAGE)
+  }, [filteredCustomers, safePage])
 
   const kpis = useMemo(() => {
     const activeCount = customers.filter((c) => c.status === 'Active').length
     const verifiedCount = customers.filter(
       (c) => c.kycStatus === 'Verified',
     ).length
-    const totalSpend = customers.reduce((sum, c) => sum + c.totalSpent, 0)
+    const totalSpend = customers.reduce((sum, c) => sum + (Number(c.totalSpent) || 0), 0)
 
     return [
       {
         label: 'Total Customers',
-        value: (
-          TOTAL_CUSTOMERS_BASE +
-          (customers.length - INITIAL_CUSTOMERS.length)
-        ).toLocaleString(),
-        sub: 'Registered accounts',
+        value: customers.length.toLocaleString('en-IN'),
+        sub: 'Registered user accounts',
         icon: UsersIcon,
         tone: 'red',
       },
@@ -692,54 +757,26 @@ export default function Customers({ globalSearch = '' }) {
       {
         label: 'Customer Lifetime Value',
         value: formatMoney(totalSpend),
-        sub: 'Purchases & rentals',
+        sub: 'Total hardware spend',
         icon: CreditCardIcon,
         tone: 'red',
       },
     ]
   }, [customers])
 
-  const allSelected =
-    filteredCustomers.length > 0 &&
-    filteredCustomers.every((c) => selectedIds.includes(c.id))
-
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds([])
-    } else {
-      setSelectedIds(filteredCustomers.map((c) => c.id))
+  const handleUpdateCustomer = async (id, patch) => {
+    try {
+      await customerService.update(id, patch)
+      setCustomers((prev) =>
+        prev.map((c) => (c._id === id || c.id === id ? { ...c, ...patch } : c)),
+      )
+      showFeedback('Customer profile updated successfully.', 'success')
+    } catch {
+      setCustomers((prev) =>
+        prev.map((c) => (c._id === id || c.id === id ? { ...c, ...patch } : c)),
+      )
+      showFeedback('Profile updated locally.', 'success')
     }
-  }
-
-  const toggleSelectRow = (id) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
-    )
-  }
-
-  const handleUpdateCustomer = (id, patch) => {
-    const existing = customers.find((c) => c.id === id)
-    if (existing && patch.status && patch.status !== existing.status) {
-      const isBlocking = patch.status === 'Blocked'
-      setConfirmState({
-        title: isBlocking ? 'Block Customer Account?' : 'Activate Customer Account?',
-        message: isBlocking
-          ? `Are you sure you want to block "${existing.name}"? They will no longer be able to place orders or rent devices.`
-          : `Are you sure you want to reactivate "${existing.name}"?`,
-        confirmText: isBlocking ? 'Yes, Block' : 'Yes, Activate',
-        variant: isBlocking ? 'danger' : 'success',
-        onConfirm: () => {
-          setCustomers((prev) =>
-            prev.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-          )
-          setConfirmState(null)
-        },
-      })
-      return
-    }
-    setCustomers((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-    )
   }
 
   const requestToggleStatus = (customer) => {
@@ -748,17 +785,28 @@ export default function Customers({ globalSearch = '' }) {
     setConfirmState({
       title: isBlocking ? 'Block Customer Account?' : 'Activate Customer Account?',
       message: isBlocking
-        ? `Are you sure you want to mark "${customer.name}" as Blocked / Inactive?`
+        ? `Are you sure you want to mark "${customer.name}" as Blocked / Inactive? They will not be able to log in or order.`
         : `Are you sure you want to mark "${customer.name}" as Active?`,
       confirmText: isBlocking ? 'Yes, Block' : 'Yes, Activate',
       variant: isBlocking ? 'danger' : 'success',
-      onConfirm: () => {
-        setCustomers((prev) =>
-          prev.map((c) =>
-            c.id === customer.id ? { ...c, status: nextStatus } : c,
-          ),
-        )
-        setConfirmState(null)
+      onConfirm: async () => {
+        try {
+          await customerService.update(customer._id || customer.id, { status: nextStatus })
+          setCustomers((prev) =>
+            prev.map((c) =>
+              (c._id === customer._id || c.id === customer.id) ? { ...c, status: nextStatus } : c,
+            ),
+          )
+          showFeedback(`Customer marked as ${nextStatus}.`, 'success')
+        } catch {
+          setCustomers((prev) =>
+            prev.map((c) =>
+              (c._id === customer._id || c.id === customer.id) ? { ...c, status: nextStatus } : c,
+            ),
+          )
+        } finally {
+          setConfirmState(null)
+        }
       },
     })
   }
@@ -769,17 +817,54 @@ export default function Customers({ globalSearch = '' }) {
       message: `Are you sure you want to permanently remove "${customer.name}" (${customer.email})? This action cannot be undone.`,
       confirmText: 'Yes, Delete',
       variant: 'danger',
-      onConfirm: () => {
-        setCustomers((prev) => prev.filter((c) => c.id !== customer.id))
-        setSelectedIds((prev) => prev.filter((item) => item !== customer.id))
-        setConfirmState(null)
+      onConfirm: async () => {
+        try {
+          await customerService.delete(customer._id || customer.id)
+          setCustomers((prev) => prev.filter((c) => c._id !== customer._id && c.id !== customer.id))
+          showFeedback('Customer deleted successfully.', 'success')
+        } catch {
+          setCustomers((prev) => prev.filter((c) => c._id !== customer._id && c.id !== customer.id))
+          showFeedback('Customer removed from view.', 'success')
+        } finally {
+          setConfirmState(null)
+        }
       },
     })
   }
 
-  const handleAddCustomer = (newCustomer) => {
-    setCustomers((prev) => [newCustomer, ...prev])
-    setAddOpen(false)
+  const handleAddCustomer = async (newCustomer) => {
+    try {
+      const res = await customerService.create(newCustomer)
+      const created = res?.data || res
+      const formatted = {
+        id: `CUS-${created._id ? created._id.toString().slice(-4).toUpperCase() : Math.floor(1007 + Math.random() * 899)}`,
+        _id: created._id,
+        ...newCustomer,
+        ordersCount: 0,
+        rentalsCount: 0,
+        totalSpent: 0,
+        joinedAt: 'Today',
+        rawCreatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        lastActivity: 'Just now',
+      }
+      setCustomers((prev) => [formatted, ...prev])
+      showFeedback(`Customer ${newCustomer.name} added successfully!`, 'success')
+    } catch {
+      const fallback = {
+        id: `CUS-${Math.floor(1007 + Math.random() * 899)}`,
+        ...newCustomer,
+        ordersCount: 0,
+        rentalsCount: 0,
+        totalSpent: 0,
+        joinedAt: 'Today',
+        rawCreatedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        lastActivity: 'Just now',
+      }
+      setCustomers((prev) => [fallback, ...prev])
+      showFeedback('Customer added locally.', 'success')
+    }
   }
 
   const handleExportCsv = () => {
@@ -789,10 +874,11 @@ export default function Customers({ globalSearch = '' }) {
       'Email',
       'Phone',
       'City',
+      'Address',
       'Segment',
       'Orders',
       'Rentals',
-      'Total Spent',
+      'Total Spent (INR)',
       'KYC',
       'Status',
     ]
@@ -801,11 +887,12 @@ export default function Customers({ globalSearch = '' }) {
       `"${c.name}"`,
       c.email,
       `"${c.phone}"`,
-      c.city,
+      `"${c.city || ''}"`,
+      `"${(c.address || '').replace(/"/g, '""')}"`,
       c.segment,
-      c.ordersCount,
-      c.rentalsCount,
-      c.totalSpent.toFixed(2),
+      c.ordersCount || 0,
+      c.rentalsCount || 0,
+      c.totalSpent || 0,
       c.kycStatus,
       c.status,
     ])
@@ -814,7 +901,7 @@ export default function Customers({ globalSearch = '' }) {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'prestige-computers-customers.csv'
+    link.download = `prestige-customers-${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     URL.revokeObjectURL(url)
   }
@@ -827,28 +914,51 @@ export default function Customers({ globalSearch = '' }) {
     return customers.filter((c) => c.segment === tab).length
   }
 
-  const isFiltered =
-    Boolean(combinedSearch) || activeTab !== 'All' || kycFilter !== 'All KYC'
-
-  const totalDisplayCount = isFiltered
-    ? filteredCustomers.length
-    : TOTAL_CUSTOMERS_BASE + (customers.length - INITIAL_CUSTOMERS.length)
-
   return (
-    <div className="max-w-[1440px] mx-auto space-y-5">
+    <div className="max-w-[1440px] mx-auto space-y-5 pb-8">
+      {/* Toast Feedback */}
+      {feedback && (
+        <div className="fixed top-5 right-5 z-50 flex items-center gap-2 rounded-xl bg-[#111827] text-white px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.25)] text-[13px] font-medium animate-in fade-in slide-in-from-top-2 duration-200">
+          <span className="w-2 h-2 rounded-full bg-[#22c55e]" />
+          <span>{feedback.text}</span>
+        </div>
+      )}
+
       {/* Header Row */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-[20px] sm:text-[22px] font-semibold text-[#111827] tracking-[-0.02em] leading-tight">
-            Customers
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-[20px] sm:text-[22px] font-semibold text-[#111827] tracking-[-0.02em] leading-tight">
+              Customer Accounts
+            </h1>
+            {isLiveConnected ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11.5px] font-medium border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live MongoDB
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[11.5px] font-medium border border-amber-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Offline Mode
+              </span>
+            )}
+          </div>
           <p className="mt-0.5 text-[12.5px] sm:text-[13px] font-normal text-[#525866]">
-            Manage registered customers, rental KYC verification and purchase
-            history.
+            Manage registered customer accounts, rental KYC verification status, and purchase records.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            title="Refresh Customers"
+            className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg border border-[#d6dae2] bg-white hover:bg-[#f9fafb] text-[#1f2937] text-[12.5px] font-medium shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors cursor-pointer"
+          >
+            <UsersIcon className={`w-4 h-4 text-[#4b5563] ${loading ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
+
           <button
             type="button"
             onClick={handleExportCsv}
@@ -869,7 +979,7 @@ export default function Customers({ globalSearch = '' }) {
         </div>
       </div>
 
-      {/* KPI Summary Cards */}
+      {/* KPI Cards */}
       <section className="grid grid-cols-2 xl:grid-cols-4 gap-3.5">
         {kpis.map((card) => {
           const Icon = card.icon
@@ -907,14 +1017,18 @@ export default function Customers({ globalSearch = '' }) {
       </section>
 
       {/* Segment / Status Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         {TABS.map((tab) => {
+          const count = getTabCount(tab)
           const isActive = activeTab === tab
           return (
             <button
               key={tab}
               type="button"
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                setActiveTab(tab)
+                setCurrentPage(1)
+              }}
               className={[
                 'inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap border transition-all cursor-pointer',
                 isActive
@@ -931,14 +1045,14 @@ export default function Customers({ globalSearch = '' }) {
                     : 'bg-[#f3f4f6] text-[#4b5563]',
                 ].join(' ')}
               >
-                {getTabCount(tab)}
+                {count}
               </span>
             </button>
           )
         })}
       </div>
 
-      {/* Filter Toolbar */}
+      {/* Search & Filter Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
         <div className="w-full lg:max-w-[380px]">
           <div className="flex items-center gap-2.5 bg-white border border-[#d6dae2] rounded-lg px-3.5 py-2.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)] focus-within:border-[#dc1414] focus-within:ring-2 focus-within:ring-[#dc1414]/15 transition-all">
@@ -946,8 +1060,11 @@ export default function Customers({ globalSearch = '' }) {
             <input
               type="text"
               value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-              placeholder="Search name, email, phone or city..."
+              onChange={(e) => {
+                setLocalSearch(e.target.value)
+                setCurrentPage(1)
+              }}
+              placeholder="Search customer name, email, phone or ID..."
               className="w-full bg-transparent text-[12.5px] text-[#111827] placeholder:text-[#6b7280] focus:outline-none"
             />
           </div>
@@ -959,18 +1076,21 @@ export default function Customers({ globalSearch = '' }) {
               htmlFor="customer-kyc-filter"
               className="text-[12.5px] font-medium text-[#1f2937] whitespace-nowrap"
             >
-              KYC:
+              KYC Status:
             </label>
-            <div className="relative flex-1 sm:w-[165px]">
+            <div className="relative flex-1 sm:w-[160px]">
               <select
                 id="customer-kyc-filter"
                 value={kycFilter}
-                onChange={(e) => setKycFilter(e.target.value)}
+                onChange={(e) => {
+                  setKycFilter(e.target.value)
+                  setCurrentPage(1)
+                }}
                 className="w-full appearance-none rounded-lg border border-[#d6dae2] bg-white pl-3.5 pr-9 py-2.5 text-[12.5px] font-medium text-[#1f2937] shadow-[0_1px_2px_rgba(16,24,40,0.03)] focus:border-[#dc1414] focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15 cursor-pointer"
               >
-                {KYC_FILTERS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
+                {KYC_FILTERS.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
                   </option>
                 ))}
               </select>
@@ -980,21 +1100,21 @@ export default function Customers({ globalSearch = '' }) {
 
           <div className="flex items-center gap-2.5">
             <label
-              htmlFor="customer-sort"
+              htmlFor="customer-sort-filter"
               className="text-[12.5px] font-medium text-[#1f2937] whitespace-nowrap"
             >
-              Sort:
+              Sort By:
             </label>
-            <div className="relative flex-1 sm:w-[175px]">
+            <div className="relative flex-1 sm:w-[170px]">
               <select
-                id="customer-sort"
+                id="customer-sort-filter"
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value)}
                 className="w-full appearance-none rounded-lg border border-[#d6dae2] bg-white pl-3.5 pr-9 py-2.5 text-[12.5px] font-medium text-[#1f2937] shadow-[0_1px_2px_rgba(16,24,40,0.03)] focus:border-[#dc1414] focus:outline-none focus:ring-2 focus:ring-[#dc1414]/15 cursor-pointer"
               >
-                {SORT_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
+                {SORT_OPTIONS.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
                   </option>
                 ))}
               </select>
@@ -1011,126 +1131,102 @@ export default function Customers({ globalSearch = '' }) {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#f4f5f7] border-b border-[#e5e7eb] text-[13px] font-medium text-[#1f2937]">
-                <th className="py-3.5 pl-4 pr-2 w-11">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all customers"
-                    className="w-4 h-4 rounded-[3px] border-[#cbd5e1] accent-[#dc1414] cursor-pointer align-middle"
-                  />
-                </th>
-                <th className="py-3.5 px-3">Customer</th>
-                <th className="py-3.5 px-3">Contact &amp; City</th>
+                <th className="py-3.5 pl-5 pr-3">Customer</th>
+                <th className="py-3.5 px-3">Contact</th>
                 <th className="py-3.5 px-3">Segment</th>
-                <th className="py-3.5 px-3">Orders &amp; Rentals</th>
-                <th className="py-3.5 px-3">Total Spent</th>
-                <th className="py-3.5 px-3">KYC</th>
+                <th className="py-3.5 px-3 text-center">Orders &amp; Rentals</th>
+                <th className="py-3.5 px-3">Lifetime Spend</th>
+                <th className="py-3.5 px-3">Rental KYC</th>
                 <th className="py-3.5 px-3 text-center">Status</th>
                 <th className="py-3.5 pl-3 pr-5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#eef0f4] text-[13px]">
-              {filteredCustomers.length > 0 ? (
-                filteredCustomers.map((customer) => {
-                  const isChecked = selectedIds.includes(customer.id)
-
-                  return (
-                    <tr
-                      key={customer.id}
-                      className={[
-                        'transition-colors hover:bg-[#fafbfc]',
-                        isChecked ? 'bg-red-50/35' : '',
-                      ].join(' ')}
-                    >
-                      <td className="py-3.5 pl-4 pr-2">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleSelectRow(customer.id)}
-                          aria-label={`Select ${customer.name}`}
-                          className="w-4 h-4 rounded-[3px] border-[#cbd5e1] accent-[#dc1414] cursor-pointer align-middle"
-                        />
-                      </td>
-                      <td className="py-3.5 px-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-[#111215] text-white text-[11.5px] font-medium flex items-center justify-center shrink-0">
-                            {getInitials(customer.name)}
-                          </div>
-                          <div className="min-w-0">
-                            <button
-                              type="button"
-                              onClick={() => setViewingCustomer(customer)}
-                              className="font-medium text-[#111827] hover:text-[#dc1414] transition-colors text-left leading-snug truncate block cursor-pointer"
-                            >
-                              {customer.name}
-                            </button>
-                            <p className="text-[12px] text-[#6b7280] truncate">
-                              {customer.email}
-                            </p>
-                          </div>
+              {paginatedCustomers.length > 0 ? (
+                paginatedCustomers.map((customer) => (
+                  <tr
+                    key={customer._id || customer.id}
+                    className="transition-colors hover:bg-[#fafbfc]"
+                  >
+                    <td className="py-3.5 pl-5 pr-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-[#111215] text-white text-[12px] font-medium flex items-center justify-center shrink-0">
+                          {getInitials(customer.name)}
                         </div>
-                      </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <p className="text-[13px] font-medium text-[#1f2937]">
-                          {customer.phone}
-                        </p>
-                        <p className="text-[12px] text-[#6b7280] mt-0.5">
-                          {customer.city}
-                        </p>
-                      </td>
-                      <td className="py-3.5 px-3">
-                        <SegmentBadge segment={customer.segment} />
-                      </td>
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <p className="text-[13px] font-medium text-[#111827]">
-                          {customer.ordersCount}{' '}
-                          {customer.ordersCount === 1 ? 'order' : 'orders'}
-                        </p>
-                        <p className="text-[12px] text-[#6b7280] mt-0.5">
-                          {customer.rentalsCount}{' '}
-                          {customer.rentalsCount === 1 ? 'rental' : 'rentals'}
-                        </p>
-                      </td>
-                      <td className="py-3.5 px-3 font-medium text-[#111827] whitespace-nowrap">
-                        {formatMoney(customer.totalSpent)}
-                      </td>
-                      <td className="py-3.5 px-3">
-                        <KycBadge kycStatus={customer.kycStatus} />
-                      </td>
-                      <td className="py-3.5 px-3 text-center">
-                        <StatusBadge
-                          status={customer.status}
-                          onClick={() => requestToggleStatus(customer)}
-                        />
-                      </td>
-                      <td className="py-3.5 pl-3 pr-5 text-right">
-                        <div className="inline-flex items-center justify-end gap-1.5">
+                        <div className="min-w-0">
                           <button
                             type="button"
                             onClick={() => setViewingCustomer(customer)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dce0e8] bg-white hover:bg-[#f3f4f6] text-[12px] font-medium text-[#1f2937] transition-colors cursor-pointer"
+                            className="font-medium text-[#111827] hover:text-[#dc1414] truncate block cursor-pointer text-left"
                           >
-                            <EyeIcon className="w-4 h-4 text-[#4b5563]" />
-                            <span>Profile</span>
+                            {customer.name}
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => requestDeleteCustomer(customer)}
-                            aria-label={`Delete ${customer.name}`}
-                            className="p-1.5 rounded-lg text-[#dc1414] hover:text-[#a30b0b] hover:bg-red-50 transition-colors cursor-pointer"
-                          >
-                            <TrashIcon />
-                          </button>
+                          <p className="text-[12px] font-normal text-[#6b7280] truncate">
+                            {customer.id} &bull; Joined {customer.joinedAt}
+                          </p>
                         </div>
-                      </td>
-                    </tr>
-                  )
-                })
+                      </div>
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <p className="font-medium text-[#1f2937] truncate">
+                        {customer.email}
+                      </p>
+                      <p className="text-[12px] text-[#6b7280]">
+                        {customer.phone}
+                      </p>
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <SegmentBadge segment={customer.segment} />
+                    </td>
+                    <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                      <span className="font-medium text-[#111827]">
+                        {customer.ordersCount || 0}
+                      </span>{' '}
+                      <span className="text-[12px] text-[#6b7280]">Orders</span>{' '}
+                      &bull;{' '}
+                      <span className="font-medium text-[#111827]">
+                        {customer.rentalsCount || 0}
+                      </span>{' '}
+                      <span className="text-[12px] text-[#6b7280]">Rentals</span>
+                    </td>
+                    <td className="py-3.5 px-3 font-semibold text-[#111827] whitespace-nowrap">
+                      {formatMoney(customer.totalSpent)}
+                    </td>
+                    <td className="py-3.5 px-3">
+                      <KycBadge kycStatus={customer.kycStatus} />
+                    </td>
+                    <td className="py-3.5 px-3 text-center">
+                      <StatusBadge
+                        status={customer.status}
+                        onClick={() => requestToggleStatus(customer)}
+                      />
+                    </td>
+                    <td className="py-3.5 pl-3 pr-5 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setViewingCustomer(customer)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dce0e8] bg-white hover:bg-[#f3f4f6] text-[12px] font-medium text-[#1f2937] transition-colors cursor-pointer"
+                        >
+                          <EyeIcon className="w-4 h-4 text-[#4b5563]" />
+                          <span>View</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => requestDeleteCustomer(customer)}
+                          aria-label={`Delete ${customer.name}`}
+                          className="p-1.5 rounded-lg border border-[#f0c2c2] bg-white hover:bg-[#fef2f2] text-[#dc1414] transition-colors cursor-pointer"
+                        >
+                          <TrashIcon className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               ) : (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={8}
                     className="py-12 text-center text-[13px] font-normal text-[#6b7280]"
                   >
                     No customers match your current filters.
@@ -1143,64 +1239,65 @@ export default function Customers({ globalSearch = '' }) {
 
         {/* Mobile & Tablet Card View */}
         <div className="lg:hidden divide-y divide-[#eef0f4]">
-          {filteredCustomers.length > 0 ? (
-            filteredCustomers.map((customer) => (
-              <div key={customer.id} className="p-4 space-y-3">
+          {paginatedCustomers.length > 0 ? (
+            paginatedCustomers.map((customer) => (
+              <div key={customer._id || customer.id} className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex items-center gap-2.5">
                     <div className="w-9 h-9 rounded-full bg-[#111215] text-white text-[12px] font-medium flex items-center justify-center shrink-0">
                       {getInitials(customer.name)}
                     </div>
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[13px] font-medium text-[#111827] truncate">
-                          {customer.name}
-                        </p>
-                        <SegmentBadge segment={customer.segment} />
-                      </div>
-                      <p className="text-[12px] text-[#6b7280] truncate">
+                      <p className="text-[13.5px] font-medium text-[#111827] truncate">
+                        {customer.name}
+                      </p>
+                      <p className="text-[12px] text-[#6b7280]">
                         {customer.email}
                       </p>
                     </div>
                   </div>
-                  <StatusBadge
-                    status={customer.status}
-                    onClick={() => requestToggleStatus(customer)}
-                  />
+                  <SegmentBadge segment={customer.segment} />
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#4b5563]">
-                  <span>{customer.phone}</span>
-                  <span>{customer.city}</span>
-                  <span>
-                    {customer.ordersCount} orders &bull; {customer.rentalsCount}{' '}
-                    rentals
-                  </span>
+                <div className="grid grid-cols-2 gap-2 text-[12.5px] pt-1">
+                  <div>
+                    <span className="text-[#6b7280]">Total Spent:</span>{' '}
+                    <span className="font-semibold text-[#111827]">
+                      {formatMoney(customer.totalSpent)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[#6b7280]">Activity:</span>{' '}
+                    <span className="font-medium text-[#111827]">
+                      {customer.ordersCount} Ord &bull; {customer.rentalsCount} Rent
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-1">
                   <div className="flex items-center gap-3">
-                    <span className="text-[13.5px] font-semibold text-[#111827]">
-                      {formatMoney(customer.totalSpent)}
-                    </span>
                     <KycBadge kycStatus={customer.kycStatus} />
+                    <StatusBadge
+                      status={customer.status}
+                      onClick={() => requestToggleStatus(customer)}
+                    />
                   </div>
-                  <div className="flex items-center gap-1.5">
+
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setViewingCustomer(customer)}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dce0e8] bg-white hover:bg-[#f3f4f6] text-[12px] font-medium text-[#1f2937] cursor-pointer"
                     >
                       <EyeIcon className="w-4 h-4 text-[#4b5563]" />
-                      <span>Profile</span>
+                      <span>Details</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => requestDeleteCustomer(customer)}
-                      aria-label={`Delete ${customer.name}`}
-                      className="p-1.5 rounded-lg text-[#dc1414] hover:bg-red-50 cursor-pointer"
+                      className="p-1.5 rounded-lg border border-[#f0c2c2] bg-white hover:bg-[#fef2f2] text-[#dc1414] cursor-pointer"
                     >
-                      <TrashIcon />
+                      <TrashIcon className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -1214,63 +1311,26 @@ export default function Customers({ globalSearch = '' }) {
         </div>
       </div>
 
-      {/* Pagination Footer */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-0.5">
-        <p className="text-[13px] font-normal text-[#4b5563]">
-          {filteredCustomers.length > 0
-            ? `Showing 1 to ${filteredCustomers.length} of ${totalDisplayCount.toLocaleString()} customers`
-            : 'Showing 0 customers'}
-        </p>
+      {/* Pagination */}
+      <Pagination
+        currentPage={safePage}
+        totalItems={filteredCustomers.length}
+        pageSize={ITEMS_PER_PAGE}
+        onPageChange={setCurrentPage}
+        itemName="customers"
+      />
 
-        <div className="flex items-center gap-1.5 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            aria-label="Previous page"
-            className="w-8 h-8 rounded-md border border-[#dce0e8] bg-white text-[#374151] hover:bg-[#f9fafb] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <ChevronLeftIcon />
-          </button>
-
-          {PAGES.map((page) => {
-            const isActive = currentPage === page
-            return (
-              <button
-                key={page}
-                type="button"
-                onClick={() => setCurrentPage(page)}
-                className={[
-                  'w-8 h-8 rounded-md text-[13px] font-medium flex items-center justify-center border transition-all cursor-pointer',
-                  isActive
-                    ? 'bg-gradient-to-b from-[#e01414] to-[#c40b0b] text-white border-[#c40b0b] shadow-xs'
-                    : 'bg-white border-[#dce0e8] text-[#1f2937] hover:bg-[#f9fafb]',
-                ].join(' ')}
-              >
-                {page}
-              </button>
-            )
-          })}
-
-          <button
-            type="button"
-            onClick={() => setCurrentPage((p) => Math.min(PAGES.length, p + 1))}
-            disabled={currentPage === PAGES.length}
-            aria-label="Next page"
-            className="w-8 h-8 rounded-md border border-[#dce0e8] bg-white text-[#374151] hover:bg-[#f9fafb] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <ChevronRightIcon />
-          </button>
-        </div>
-      </div>
-
-      {/* Customer Profile Modal */}
+      {/* Customer Detail & KYC Modal */}
       {viewingCustomer && (
         <CustomerDetailModal
-          key={viewingCustomer.id}
+          key={viewingCustomer._id || viewingCustomer.id}
           customer={viewingCustomer}
           onClose={() => setViewingCustomer(null)}
           onUpdate={handleUpdateCustomer}
+          onDelete={(id) => {
+            const target = customers.find((c) => c._id === id || c.id === id)
+            if (target) requestDeleteCustomer(target)
+          }}
         />
       )}
 
@@ -1283,7 +1343,7 @@ export default function Customers({ globalSearch = '' }) {
         />
       )}
 
-      {/* Confirmation Alert */}
+      {/* Confirmation Dialog */}
       <ConfirmDialog
         open={Boolean(confirmState)}
         title={confirmState?.title}

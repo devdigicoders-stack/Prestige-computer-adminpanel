@@ -6,7 +6,11 @@ export const SIDEBAR_NAV_ITEMS = [
   { id: 'orders', label: 'Orders', path: '/orders', icon: 'orders', hasArrow: true },
   { id: 'rentals', label: 'Rentals', path: '/rentals', icon: 'rentals', hasArrow: true },
   { id: 'customers', label: 'Customers', path: '/customers', icon: 'customers', hasArrow: true },
+  { id: 'enquiries', label: 'Enquiries & Leads', path: '/enquiries', icon: 'enquiries', hasArrow: true },
   { id: 'payments', label: 'Payments', path: '/payments', icon: 'payments', hasArrow: true },
+  { id: 'coupons', label: 'Coupons & Discounts', path: '/coupons', icon: 'coupons', hasArrow: true },
+  { id: 'reviews', label: 'Reviews', path: '/reviews', icon: 'reviews', hasArrow: true },
+  { id: 'blogs', label: 'Blog Management', path: '/blogs', icon: 'blogs', hasArrow: true },
   { id: 'reports', label: 'Reports & Analytics', path: '/reports', icon: 'reports', hasArrow: false },
   { id: 'settings', label: 'Settings', path: '/settings', icon: 'settings', hasArrow: false },
 ]

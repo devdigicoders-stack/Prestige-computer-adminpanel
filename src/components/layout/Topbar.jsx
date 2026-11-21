@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   BellIcon,
   ChevronDownIcon,
@@ -9,38 +10,15 @@ import {
   SettingsIcon,
   UserOutlineIcon,
 } from '../common/Icons'
+import { useAuth } from '../../hooks/useAuth'
+import { getFullAvatarUrl } from '../../services/adminAuthService'
 
-function AdminAvatar() {
+function DefaultAdminAvatar({ name = 'Admin' }) {
+  const initial = name ? name.charAt(0).toUpperCase() : 'A'
+
   return (
-    <div className="w-9 h-9 rounded-full bg-[#e5e7eb] border border-[#d1d5db] overflow-hidden shrink-0 flex items-end justify-center">
-      <svg viewBox="0 0 40 40" className="w-full h-full" aria-hidden="true">
-        <rect width="40" height="40" fill="#e5e7eb" />
-        {/* Shoulders / Suit */}
-        <path
-          d="M7 40c1-7.5 6.3-11.5 13-11.5S32 32.5 33 40H7Z"
-          fill="#1f2937"
-        />
-        {/* White Shirt Collar */}
-        <path d="M16.2 29.2 20 34.5l3.8-5.3-3.8-1.4-3.8 1.4Z" fill="#ffffff" />
-        {/* Neck */}
-        <rect x="17.2" y="23" width="5.6" height="6" rx="2" fill="#e5b89b" />
-        {/* Face */}
-        <ellipse cx="20" cy="17.5" rx="6.2" ry="7.2" fill="#f1c7a8" />
-        {/* Hair */}
-        <path
-          d="M13.6 16.5c-.2-4.8 2.6-8.1 6.6-8.1 3.9 0 6.5 2.7 6.3 7.6-.8-2.4-2.5-3.8-5.9-3.9-3.2-.1-5.6 1.5-7 4.4Z"
-          fill="#1c1917"
-        />
-        {/* Subtle Beard */}
-        <path
-          d="M14.4 18.8c.5 3.7 2.6 5.9 5.6 5.9s5.1-2.2 5.6-5.9c-.9 2-2.9 3.2-5.6 3.2s-4.7-1.2-5.6-3.2Z"
-          fill="#292524"
-          fillOpacity="0.65"
-        />
-        {/* Eyes */}
-        <circle cx="17.7" cy="17.4" r="0.85" fill="#1c1917" />
-        <circle cx="22.3" cy="17.4" r="0.85" fill="#1c1917" />
-      </svg>
+    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#cc0e0e] to-[#800505] text-white font-semibold text-[13px] flex items-center justify-center border border-white/20 shadow-xs shrink-0 select-none">
+      {initial}
     </div>
   )
 }
@@ -52,8 +30,11 @@ export default function Topbar({
   onOpenSettings,
   onLogout,
 }) {
+  const { user, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [failedAvatar, setFailedAvatar] = useState('')
   const dropdownRef = useRef(null)
+  const navigate = useNavigate()
 
   useEffect(() => {
     const handleOutside = (e) => {
@@ -64,6 +45,24 @@ export default function Topbar({
     document.addEventListener('mousedown', handleOutside)
     return () => document.removeEventListener('mousedown', handleOutside)
   }, [])
+
+  const handleProfileClick = () => {
+    setMenuOpen(false)
+    navigate('/settings')
+  }
+
+  const handleLogoutClick = () => {
+    setMenuOpen(false)
+    if (onLogout) {
+      onLogout()
+    } else {
+      logout()
+      navigate('/login', { replace: true })
+    }
+  }
+
+  const avatarUrl = user?.avatar ? getFullAvatarUrl(user.avatar) : ''
+  const showImage = Boolean(avatarUrl && failedAvatar !== avatarUrl)
 
   return (
     <header className="h-[62px] sm:h-[64px] bg-white border-b border-[#e5e7eb] px-4 sm:px-6 flex items-center justify-between gap-3 shrink-0 z-30">
@@ -92,7 +91,7 @@ export default function Topbar({
         </div>
       </div>
 
-      {/* Right: Notification, Help & Admin Profile */}
+      {/* Right: Notification, Help & Dynamic Admin Profile */}
       <div className="flex items-center gap-2 sm:gap-3.5 shrink-0">
         {/* Notifications Bell */}
         <button
@@ -115,55 +114,74 @@ export default function Topbar({
           <HelpCircleIcon className="w-[21px] h-[21px]" />
         </button>
 
-        {/* Admin Profile Dropdown */}
+        {/* Dynamic Admin Profile Dropdown */}
         <div className="relative" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => setMenuOpen((prev) => !prev)}
             className="flex items-center gap-2.5 pl-1 pr-1.5 py-1 rounded-lg hover:bg-[#f3f4f6] transition-colors cursor-pointer"
           >
-            <AdminAvatar />
+            {showImage ? (
+              <img
+                key={avatarUrl}
+                src={avatarUrl}
+                alt={user?.name || 'Admin'}
+                onError={() => setFailedAvatar(avatarUrl)}
+                className="w-9 h-9 rounded-full object-cover border border-[#d1d5db] shadow-2xs"
+              />
+            ) : (
+              <DefaultAdminAvatar name={user?.name || 'Admin'} />
+            )}
+
             <div className="hidden md:block text-left leading-tight">
-              <div className="text-[12.5px] font-medium text-[#111827]">Admin</div>
-              <div className="text-[11.5px] font-normal text-[#6b7280]">
-                Super Admin
+              <div className="text-[12.5px] font-semibold text-[#111827] max-w-[120px] truncate">
+                {user?.name || 'Admin'}
+              </div>
+              <div className="text-[11px] font-normal text-[#6b7280] uppercase tracking-wide">
+                {user?.role === 'admin' ? 'Super Admin' : user?.role || 'Admin'}
               </div>
             </div>
             <ChevronDownIcon className="w-4 h-4 text-[#4b5563] hidden sm:block" />
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white border border-[#e5e7eb] shadow-[0_10px_28px_rgba(16,24,40,0.12)] py-1.5 z-50">
-              <div className="px-3.5 py-2 border-b border-[#f0f2f5] md:hidden">
-                <p className="text-[13px] font-medium text-[#111827]">Admin</p>
-                <p className="text-[11.5px] text-[#6b7280]">Super Admin</p>
+            <div className="absolute right-0 mt-2 w-52 rounded-xl bg-white border border-[#e5e7eb] shadow-[0_10px_28px_rgba(16,24,40,0.12)] py-1.5 z-50">
+              <div className="px-3.5 py-2.5 border-b border-[#f0f2f5]">
+                <p className="text-[13px] font-semibold text-[#111827] truncate">
+                  {user?.name || 'Admin'}
+                </p>
+                <p className="text-[11.5px] text-[#6b7280] truncate">
+                  {user?.email || 'admin@gmail.com'}
+                </p>
               </div>
+
               <button
                 type="button"
-                onClick={() => setMenuOpen(false)}
+                onClick={handleProfileClick}
                 className="w-full px-3.5 py-2 text-left text-[13px] font-medium text-[#374151] hover:bg-[#f9fafb] flex items-center gap-2.5 cursor-pointer"
               >
                 <UserOutlineIcon className="w-4 h-4 text-[#6b7280]" />
-                <span>My Profile</span>
+                <span>My Profile &amp; Avatar</span>
               </button>
+
               <button
                 type="button"
                 onClick={() => {
                   setMenuOpen(false)
-                  onOpenSettings?.()
+                  if (onOpenSettings) onOpenSettings()
+                  else navigate('/settings')
                 }}
                 className="w-full px-3.5 py-2 text-left text-[13px] font-medium text-[#374151] hover:bg-[#f9fafb] flex items-center gap-2.5 cursor-pointer"
               >
                 <SettingsIcon className="w-4 h-4 text-[#6b7280]" />
-                <span>Settings</span>
+                <span>Store Settings</span>
               </button>
+
               <div className="my-1 border-t border-[#f0f2f5]" />
+
               <button
                 type="button"
-                onClick={() => {
-                  setMenuOpen(false)
-                  onLogout?.()
-                }}
+                onClick={handleLogoutClick}
                 className="w-full px-3.5 py-2 text-left text-[13px] font-medium text-[#dc1414] hover:bg-red-50 flex items-center gap-2.5 cursor-pointer"
               >
                 <LogoutIcon className="w-4 h-4" />

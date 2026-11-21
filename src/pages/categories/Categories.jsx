@@ -1,10 +1,8 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmDialog from '../../components/common/ConfirmDialog'
 import {
   CategoriesIcon,
   ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   CloseIcon,
   CubeIcon,
   PencilIcon,
@@ -12,72 +10,14 @@ import {
   SearchIcon,
   TrashIcon,
 } from '../../components/common/Icons'
-
-const INITIAL_CATEGORIES = [
-  {
-    id: 'CAT-001',
-    name: 'Laptops',
-    slug: 'laptops',
-    description: 'Business ultrabooks, student & everyday laptops',
-    productCount: 48,
-    type: 'Buy & Rent',
-    status: 'Active',
-    iconType: 'laptop',
-  },
-  {
-    id: 'CAT-002',
-    name: 'Gaming Laptops',
-    slug: 'gaming-laptops',
-    description: 'High-refresh RTX gaming & creator laptops',
-    productCount: 26,
-    type: 'Buy & Rent',
-    status: 'Active',
-    iconType: 'gaming',
-  },
-  {
-    id: 'CAT-003',
-    name: 'Desktop PCs',
-    slug: 'desktop-pcs',
-    description: 'Custom RGB gaming towers & office workstations',
-    productCount: 22,
-    type: 'Buy & Rent',
-    status: 'Active',
-    iconType: 'desktop',
-  },
-  {
-    id: 'CAT-004',
-    name: 'Monitors & Displays',
-    slug: 'monitors-displays',
-    description: '4K studio, ultrawide & 144Hz gaming monitors',
-    productCount: 19,
-    type: 'Buy & Rent',
-    status: 'Active',
-    iconType: 'monitor',
-  },
-  {
-    id: 'CAT-005',
-    name: 'PC Components',
-    slug: 'pc-components',
-    description: 'Graphics cards, processors, RAM, NVMe SSDs',
-    productCount: 15,
-    type: 'Buy Only',
-    status: 'Active',
-    iconType: 'components',
-  },
-  {
-    id: 'CAT-006',
-    name: 'Accessories & Peripherals',
-    slug: 'accessories-peripherals',
-    description: 'Gaming headsets, mechanical keyboards & mice',
-    productCount: 12,
-    type: 'Buy Only',
-    status: 'Hidden',
-    iconType: 'accessories',
-  },
-]
+import categoryService, {
+  getFullCategoryImageUrl,
+} from '../../services/categoryService'
+import Pagination from '../../components/common/Pagination'
 
 const TYPES = ['All Types', 'Buy & Rent', 'Buy Only', 'Rent Only']
 const STATUSES = ['All Status', 'Active', 'Hidden']
+const ITEMS_PER_PAGE = 8
 const ICON_OPTIONS = [
   { value: 'laptop', label: 'Laptop' },
   { value: 'gaming', label: 'Gaming' },
@@ -85,10 +25,14 @@ const ICON_OPTIONS = [
   { value: 'monitor', label: 'Monitor' },
   { value: 'components', label: 'PC Components' },
   { value: 'accessories', label: 'Accessories' },
+  { value: 'software', label: 'Software' },
+  { value: 'business', label: 'Business Solutions' },
+  { value: 'education', label: 'Education' },
 ]
 
 function slugify(text) {
   return text
+    .toString()
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9\s-]/g, '')
@@ -116,10 +60,19 @@ function UploadCloudIcon({ className = 'w-6 h-6' }) {
 }
 
 function CategoryThumbIcon({ type = 'laptop', imageUrl = '' }) {
-  if (imageUrl) {
+  const [hasError, setHasError] = useState(false)
+  const fullUrl = imageUrl ? getFullCategoryImageUrl(imageUrl) : ''
+
+  if (fullUrl && !hasError) {
     return (
       <div className="w-10 h-10 rounded-lg border border-[#e5e7eb] bg-[#f8f9fb] overflow-hidden shrink-0">
-        <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+        <img
+          key={fullUrl}
+          src={fullUrl}
+          alt=""
+          onError={() => setHasError(true)}
+          className="w-full h-full object-cover"
+        />
       </div>
     )
   }
@@ -141,7 +94,7 @@ function CategoryThumbIcon({ type = 'laptop', imageUrl = '' }) {
           <circle cx="17.5" cy="13" r="0.8" fill="currentColor" stroke="none" />
         </svg>
       )}
-      {type === 'desktop' && (
+      {(type === 'desktop' || type === 'business') && (
         <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <rect x="6" y="3" width="12" height="18" rx="2" />
           <circle cx="12" cy="9" r="2.2" />
@@ -162,7 +115,7 @@ function CategoryThumbIcon({ type = 'laptop', imageUrl = '' }) {
           <path d="M9.5 3.5v3M14.5 3.5v3M9.5 17.5v3M14.5 17.5v3M3.5 9.5h3M3.5 14.5h3M17.5 9.5h3M17.5 14.5h3" />
         </svg>
       )}
-      {type === 'accessories' && (
+      {(type === 'accessories' || type === 'software' || type === 'education') && (
         <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M4 13a8 8 0 0 1 16 0" />
           <rect x="3" y="13" width="3.5" height="6" rx="1.5" />
@@ -185,8 +138,8 @@ function StatusBadge({ status, onClick }) {
       onClick={onClick}
       title={
         status === 'Active'
-          ? 'Click to hide category'
-          : 'Click to activate category'
+          ? 'Click to hide category from storefront'
+          : 'Click to activate category on storefront'
       }
       className={[
         'inline-flex items-center justify-center px-3.5 py-1 rounded-full text-[12px] font-medium leading-none whitespace-nowrap transition-colors cursor-pointer',
@@ -201,8 +154,8 @@ function StatusBadge({ status, onClick }) {
 function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
   const fileInputRef = useRef(null)
   const [isDragging, setIsDragging] = useState(false)
-  const [image, setImage] = useState(editingCategory?.image || '')
-  const [imageName, setImageName] = useState(editingCategory?.imageName || '')
+  const [imagePreview, setImagePreview] = useState(editingCategory?.image || '')
+  const [imageFile, setImageFile] = useState(null)
   const [name, setName] = useState(editingCategory?.name || '')
   const [slug, setSlug] = useState(editingCategory?.slug || '')
   const [slugTouched, setSlugTouched] = useState(Boolean(editingCategory))
@@ -214,17 +167,18 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
   const [iconType, setIconType] = useState(
     editingCategory?.iconType || 'laptop',
   )
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
   if (!isOpen) return null
 
   const handleImageFile = (file) => {
     if (!file || !file.type.startsWith('image/')) return
+    setImageFile(file)
     const reader = new FileReader()
     reader.onload = (ev) => {
       if (typeof ev.target?.result === 'string') {
-        setImage(ev.target.result)
-        setImageName(file.name)
+        setImagePreview(ev.target.result)
       }
     }
     reader.readAsDataURL(file)
@@ -244,7 +198,7 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
     if (error) setError('')
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!name.trim()) {
       setError('Please enter a category name.')
@@ -256,19 +210,39 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
       return
     }
 
-    onSave({
-      id: editingCategory?.id || `CAT-${Date.now().toString().slice(-4)}`,
-      name: name.trim(),
-      slug: cleanSlug,
-      description:
-        description.trim() || 'Computer store category products & accessories',
-      productCount: editingCategory?.productCount ?? 0,
-      type,
-      status,
-      iconType,
-      image,
-      imageName,
-    })
+    try {
+      setIsSubmitting(true)
+      setError('')
+
+      let payload
+      if (imageFile) {
+        payload = new FormData()
+        payload.append('name', name.trim())
+        payload.append('slug', cleanSlug)
+        payload.append('description', description.trim())
+        payload.append('type', type)
+        payload.append('status', status)
+        payload.append('iconType', iconType)
+        payload.append('image', imageFile)
+      } else {
+        payload = {
+          name: name.trim(),
+          slug: cleanSlug,
+          description: description.trim(),
+          type,
+          status,
+          iconType,
+          image: imagePreview,
+        }
+      }
+
+      await onSave(payload, editingCategory?._id || editingCategory?.id)
+    } catch (err) {
+      console.error('Save category error:', err)
+      setError(err.message || 'Failed to save category.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -280,7 +254,7 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
               {editingCategory ? 'Edit Category' : 'Add New Category'}
             </h3>
             <p className="text-[12px] font-normal text-[#6b7280] mt-0.5">
-              Upload a category thumbnail and configure storefront details.
+              Upload a category image and configure storefront presentation.
             </p>
           </div>
           <button
@@ -307,7 +281,7 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
           {/* Category Image Upload */}
           <div>
             <label className="block text-[13px] font-medium text-[#374151] mb-1.5">
-              Category Image
+              Category Image (Dynamic Upload to backend/uploads)
             </label>
 
             <input
@@ -321,21 +295,25 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
               className="hidden"
             />
 
-            {image ? (
+            {imagePreview ? (
               <div className="flex items-center gap-4 p-3 rounded-xl border border-[#e5e7eb] bg-[#f8f9fb]">
                 <div className="w-20 h-16 rounded-lg overflow-hidden border border-[#dce0e8] bg-white shrink-0">
                   <img
-                    src={image}
+                    src={
+                      imagePreview.startsWith('data:')
+                        ? imagePreview
+                        : getFullCategoryImageUrl(imagePreview)
+                    }
                     alt={name || 'Category preview'}
                     className="w-full h-full object-cover"
                   />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-medium text-[#111827] truncate">
-                    {imageName || 'Category thumbnail'}
+                    {imageFile?.name || 'Selected category image'}
                   </p>
                   <p className="text-[11.5px] font-normal text-[#6b7280] mt-0.5">
-                    Displayed in category table &amp; storefront cards
+                    Saved in backend and displayed on website &amp; admin cards
                   </p>
                   <div className="flex items-center gap-2 mt-2">
                     <button
@@ -348,8 +326,8 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
                     <button
                       type="button"
                       onClick={() => {
-                        setImage('')
-                        setImageName('')
+                        setImagePreview('')
+                        setImageFile(null)
                       }}
                       className="px-2.5 py-1 rounded-md text-[12px] font-medium text-[#dc1414] hover:bg-red-50 cursor-pointer"
                     >
@@ -378,8 +356,7 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
                   <UploadCloudIcon className="w-5 h-5" />
                 </div>
                 <p className="mt-2 text-[13px] font-medium text-[#111827]">
-                  <span className="text-[#dc1414]">Click to upload</span> or
-                  drag &amp; drop image
+                  <span className="text-[#dc1414]">Click to upload</span> or drag &amp; drop image
                 </p>
                 <p className="text-[11.5px] text-[#6b7280] mt-0.5">
                   PNG, JPG or WebP (recommended 400&times;400px)
@@ -484,7 +461,6 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
               </select>
             </div>
           </div>
-
         </form>
 
         <div className="flex items-center justify-end gap-2.5 px-5 py-3.5 border-t border-[#eef0f4] bg-[#fafbfc] shrink-0">
@@ -498,9 +474,10 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
           <button
             type="submit"
             form="category-form"
-            className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs cursor-pointer"
+            disabled={isSubmitting}
+            className="px-5 py-2 rounded-lg bg-gradient-to-b from-[#e01414] to-[#c00a0a] hover:from-[#eb1717] hover:to-[#ab0808] text-white text-[12.5px] font-medium shadow-xs disabled:opacity-75 cursor-pointer flex items-center gap-1.5"
           >
-            {editingCategory ? 'Save Changes' : 'Add Category'}
+            {isSubmitting ? 'Saving...' : editingCategory ? 'Save Changes' : 'Add Category'}
           </button>
         </div>
       </div>
@@ -509,14 +486,60 @@ function CategoryModal({ isOpen, editingCategory, onClose, onSave }) {
 }
 
 export default function Categories({ globalSearch = '' }) {
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES)
+  const [categories, setCategories] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
   const [localSearch, setLocalSearch] = useState('')
   const [selectedType, setSelectedType] = useState('All Types')
   const [selectedStatus, setSelectedStatus] = useState('All Status')
-  const [selectedIds, setSelectedIds] = useState([])
   const [currentPage, setCurrentPage] = useState(1)
   const [modalState, setModalState] = useState({ open: false, category: null })
   const [confirmState, setConfirmState] = useState(null)
+  const [feedbackToast, setFeedbackToast] = useState(null)
+
+  const showToast = (message, tone = 'success') => {
+    setFeedbackToast({ message, tone })
+    window.setTimeout(() => {
+      setFeedbackToast((prev) => (prev?.message === message ? null : prev))
+    }, 3500)
+  }
+
+  // Load live categories from backend API
+  const loadCategories = async () => {
+    try {
+      setIsLoading(true)
+      const res = await categoryService.getAll({ all: 'true' })
+      if (res?.data) {
+        setCategories(res.data)
+      }
+    } catch (err) {
+      console.warn('Failed to fetch categories from API:', err?.message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    let isMounted = true
+    categoryService
+      .getAll({ all: 'true' })
+      .then((res) => {
+        if (isMounted && res?.data) {
+          setCategories(res.data)
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to fetch categories from API:', err?.message)
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const combinedSearch = (localSearch || globalSearch).trim().toLowerCase()
 
@@ -526,7 +549,7 @@ export default function Categories({ globalSearch = '' }) {
         !combinedSearch ||
         item.name.toLowerCase().includes(combinedSearch) ||
         item.slug.toLowerCase().includes(combinedSearch) ||
-        item.description.toLowerCase().includes(combinedSearch)
+        item.description?.toLowerCase().includes(combinedSearch)
 
       const matchesType =
         selectedType === 'All Types' || item.type === selectedType
@@ -538,9 +561,17 @@ export default function Categories({ globalSearch = '' }) {
     })
   }, [categories, combinedSearch, selectedType, selectedStatus])
 
+  const totalPages = Math.max(1, Math.ceil(filteredCategories.length / ITEMS_PER_PAGE))
+  const safePage = Math.min(Math.max(1, currentPage), totalPages)
+
+  const paginatedCategories = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE
+    return filteredCategories.slice(start, start + ITEMS_PER_PAGE)
+  }, [filteredCategories, safePage])
+
   const stats = useMemo(() => {
-    const activeCount = categories.filter((c) => c.status === 'Active').length
-    const totalLinked = categories.reduce((sum, c) => sum + c.productCount, 0)
+    const activeCount = categories.filter((c) => c.status === 'Active' || c.isActive).length
+    const totalLinked = categories.reduce((sum, c) => sum + (c.productCount || 0), 0)
     const rentalEnabled = categories.filter(
       (c) => c.type === 'Buy & Rent' || c.type === 'Rent Only',
     ).length
@@ -569,86 +600,78 @@ export default function Categories({ globalSearch = '' }) {
     ]
   }, [categories])
 
-  const allSelected =
-    filteredCategories.length > 0 &&
-    filteredCategories.every((c) => selectedIds.includes(c.id))
-
-  const toggleSelectAll = () => {
-    if (allSelected) {
-      setSelectedIds([])
-    } else {
-      setSelectedIds(filteredCategories.map((c) => c.id))
+  // Handle Create or Update category in backend
+  const handleSaveCategory = async (payload, existingId) => {
+    try {
+      if (existingId) {
+        await categoryService.update(existingId, payload)
+        showToast('Category updated successfully!')
+      } else {
+        await categoryService.create(payload)
+        showToast('Category created successfully!')
+      }
+      await loadCategories()
+      setModalState({ open: false, category: null })
+    } catch (err) {
+      console.error('Save failed:', err)
+      showToast(err.message || 'Operation failed', 'error')
+      throw err
     }
   }
 
-  const toggleSelectRow = (id) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
-    )
-  }
-
-  const handleSaveCategory = (saved) => {
-    setCategories((prev) => {
-      const exists = prev.some((c) => c.id === saved.id)
-      if (exists) {
-        return prev.map((c) => (c.id === saved.id ? saved : c))
-      }
-      return [saved, ...prev]
-    })
-    setModalState({ open: false, category: null })
-  }
-
+  // Handle Delete category in backend
   const requestDeleteCategory = (category) => {
+    const targetId = category._id || category.id
     setConfirmState({
       title: 'Delete Category?',
       message: `Are you sure you want to delete "${category.name}"? Products linked to this category will need reassignment.`,
       confirmText: 'Yes, Delete',
       variant: 'danger',
-      onConfirm: () => {
-        setCategories((prev) => prev.filter((c) => c.id !== category.id))
-        setSelectedIds((prev) => prev.filter((item) => item !== category.id))
-        setConfirmState(null)
+      onConfirm: async () => {
+        try {
+          await categoryService.delete(targetId)
+          setCategories((prev) => prev.filter((c) => (c._id || c.id) !== targetId))
+          showToast('Category removed successfully!')
+        } catch (err) {
+          showToast(err.message || 'Failed to delete category.', 'error')
+        } finally {
+          setConfirmState(null)
+        }
       },
     })
   }
 
-  const requestBulkDelete = () => {
-    const count = selectedIds.length
-    setConfirmState({
-      title: `Delete ${count} Selected ${count === 1 ? 'Category' : 'Categories'}?`,
-      message: `Are you sure you want to permanently delete ${count} selected ${count === 1 ? 'category' : 'categories'}?`,
-      confirmText: `Delete (${count})`,
-      variant: 'danger',
-      onConfirm: () => {
-        setCategories((prev) => prev.filter((c) => !selectedIds.includes(c.id)))
-        setSelectedIds([])
-        setConfirmState(null)
-      },
-    })
-  }
-
+  // Handle status toggle (Active <-> Hidden)
   const requestToggleStatus = (category) => {
-    const nextStatus = category.status === 'Active' ? 'Hidden' : 'Active'
+    const targetId = category._id || category.id
+    const currentStatus = category.status || (category.isActive ? 'Active' : 'Hidden')
+    const nextStatus = currentStatus === 'Active' ? 'Hidden' : 'Active'
     const isHiding = nextStatus === 'Hidden'
+
     setConfirmState({
-      title: isHiding ? 'Deactivate Category?' : 'Activate Category?',
+      title: isHiding ? 'Hide Category from Storefront?' : 'Activate Category on Storefront?',
       message: isHiding
-        ? `Are you sure you want to hide "${category.name}" from the storefront?`
-        : `Are you sure you want to activate "${category.name}" and make it visible to customers?`,
+        ? `Are you sure you want to hide "${category.name}" from customers on the website?`
+        : `Are you sure you want to activate "${category.name}" and make it visible on the website?`,
       confirmText: isHiding ? 'Yes, Hide' : 'Yes, Activate',
       variant: isHiding ? 'warning' : 'success',
-      onConfirm: () => {
-        setCategories((prev) =>
-          prev.map((c) =>
-            c.id === category.id ? { ...c, status: nextStatus } : c,
-          ),
-        )
-        setConfirmState(null)
+      onConfirm: async () => {
+        try {
+          await categoryService.update(targetId, { status: nextStatus })
+          setCategories((prev) =>
+            prev.map((c) =>
+              (c._id || c.id) === targetId ? { ...c, status: nextStatus, isActive: nextStatus === 'Active' } : c,
+            ),
+          )
+          showToast(`Category status changed to ${nextStatus}!`)
+        } catch (err) {
+          showToast(err.message || 'Failed to update status.', 'error')
+        } finally {
+          setConfirmState(null)
+        }
       },
     })
   }
-
-  const pages = [1, 2]
 
   return (
     <div className="max-w-[1440px] mx-auto space-y-5">
@@ -659,23 +682,11 @@ export default function Categories({ globalSearch = '' }) {
             Categories
           </h1>
           <p className="mt-0.5 text-[12.5px] sm:text-[13px] font-normal text-[#525866]">
-            Organize your product categories, rental availability and store
-            visibility.
+            Manage product categories, dynamic thumbnails, rental availability, and storefront visibility.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 self-start sm:self-auto">
-          {selectedIds.length > 0 && (
-            <button
-              type="button"
-              onClick={requestBulkDelete}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-[#b91c1c] text-[12.5px] font-medium transition-colors cursor-pointer"
-            >
-              <TrashIcon className="w-4 h-4" />
-              <span>Delete ({selectedIds.length})</span>
-            </button>
-          )}
-
           <button
             type="button"
             onClick={() => setModalState({ open: true, category: null })}
@@ -686,6 +697,21 @@ export default function Categories({ globalSearch = '' }) {
           </button>
         </div>
       </div>
+
+      {/* Feedback Toast */}
+      {feedbackToast && (
+        <div
+          role="status"
+          className={[
+            'rounded-xl px-4 py-3 text-[12.5px] font-medium border flex items-center gap-2.5 transition-all',
+            feedbackToast.tone === 'error'
+              ? 'bg-red-50 border-red-200 text-[#b91c1c]'
+              : 'bg-emerald-50 border-emerald-200 text-[#15803d]',
+          ].join(' ')}
+        >
+          <span>{feedbackToast.message}</span>
+        </div>
+      )}
 
       {/* Quick Summary Stats */}
       <section className="grid grid-cols-2 xl:grid-cols-4 gap-3.5">
@@ -782,91 +808,159 @@ export default function Categories({ globalSearch = '' }) {
 
       {/* Categories Table Card */}
       <div className="bg-white rounded-xl border border-[#e5e7eb] shadow-[0_2px_10px_rgba(16,24,40,0.04)] overflow-hidden">
-        {/* Desktop & Tablet Table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#f4f5f7] border-b border-[#e5e7eb] text-[13px] font-medium text-[#1f2937]">
-                <th className="py-3.5 pl-4 pr-2 w-11">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all categories"
-                    className="w-4 h-4 rounded-[3px] border-[#cbd5e1] accent-[#dc1414] cursor-pointer align-middle"
-                  />
-                </th>
-                <th className="py-3.5 px-3">Category</th>
-                <th className="py-3.5 px-3">Description</th>
-                <th className="py-3.5 px-3 text-center">Products</th>
-                <th className="py-3.5 px-3">Type</th>
-                <th className="py-3.5 px-3 text-center">Status</th>
-                <th className="py-3.5 pl-3 pr-5 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#eef0f4] text-[13px]">
-              {filteredCategories.length > 0 ? (
-                filteredCategories.map((category) => {
-                  const isChecked = selectedIds.includes(category.id)
-                  return (
-                    <tr
-                      key={category.id}
-                      className={[
-                        'transition-colors hover:bg-[#fafbfc]',
-                        isChecked ? 'bg-red-50/35' : '',
-                      ].join(' ')}
-                    >
-                      <td className="py-3.5 pl-4 pr-2">
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => toggleSelectRow(category.id)}
-                          aria-label={`Select ${category.name}`}
-                          className="w-4 h-4 rounded-[3px] border-[#cbd5e1] accent-[#dc1414] cursor-pointer align-middle"
-                        />
+        {isLoading ? (
+          <div className="py-16 text-center text-[#6b7280]">
+            <div className="w-8 h-8 rounded-full border-3 border-[#dc1414]/20 border-t-[#dc1414] animate-spin mx-auto mb-2" />
+            <p className="text-[13px] font-medium">Loading Categories from Database...</p>
+          </div>
+        ) : (
+          <>
+            {/* Desktop & Tablet Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-[#f4f5f7] border-b border-[#e5e7eb] text-[13px] font-medium text-[#1f2937]">
+                    <th className="py-3.5 pl-5 pr-3">Category</th>
+                    <th className="py-3.5 px-3">Description</th>
+                    <th className="py-3.5 px-3 text-center">Products</th>
+                    <th className="py-3.5 px-3">Type</th>
+                    <th className="py-3.5 px-3 text-center">Status</th>
+                    <th className="py-3.5 pl-3 pr-5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#eef0f4] text-[13px]">
+                  {paginatedCategories.length > 0 ? (
+                    paginatedCategories.map((category) => {
+                      const catId = category._id || category.id
+                      const catStatus = category.status || (category.isActive ? 'Active' : 'Hidden')
+
+                      return (
+                        <tr
+                          key={catId}
+                          className="transition-colors hover:bg-[#fafbfc]"
+                        >
+                          <td className="py-3.5 pl-5 pr-3">
+                            <div className="flex items-center gap-3">
+                              <CategoryThumbIcon
+                                type={category.iconType}
+                                imageUrl={category.image}
+                              />
+                              <div className="min-w-0">
+                                <p className="font-medium text-[#111827] leading-snug">
+                                  {category.name}
+                                </p>
+                                <p className="text-[12px] font-normal text-[#6b7280]">
+                                  /{category.slug}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3 text-[12.5px] text-[#4b5563] max-w-[300px]">
+                            <p className="truncate">{category.description}</p>
+                          </td>
+                          <td className="py-3.5 px-3 text-center">
+                            <span className="inline-flex items-center justify-center min-w-[36px] px-2.5 py-0.5 rounded-md bg-[#f3f4f6] text-[13px] font-medium text-[#111827]">
+                              {category.productCount || 0}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-3 font-medium text-[#374151] whitespace-nowrap">
+                            {category.type || 'Buy & Rent'}
+                          </td>
+                          <td className="py-3.5 px-3 text-center">
+                            <StatusBadge
+                              status={catStatus}
+                              onClick={() => requestToggleStatus(category)}
+                            />
+                          </td>
+                          <td className="py-3.5 pl-3 pr-5">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setModalState({ open: true, category })
+                                }
+                                aria-label={`Edit ${category.name}`}
+                                className="p-1.5 rounded-lg text-[#374151] hover:text-[#111827] hover:bg-[#f3f4f6] transition-colors cursor-pointer"
+                              >
+                                <PencilIcon />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => requestDeleteCategory(category)}
+                                aria-label={`Delete ${category.name}`}
+                                className="p-1.5 rounded-lg text-[#dc1414] hover:text-[#a30b0b] hover:bg-red-50 transition-colors cursor-pointer"
+                              >
+                                <TrashIcon />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  ) : (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="py-12 text-center text-[13px] font-normal text-[#6b7280]"
+                      >
+                        No categories match your current filters.
                       </td>
-                      <td className="py-3.5 px-3">
-                        <div className="flex items-center gap-3">
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-[#eef0f4]">
+              {paginatedCategories.length > 0 ? (
+                paginatedCategories.map((category) => {
+                  const catId = category._id || category.id
+                  const catStatus = category.status || (category.isActive ? 'Active' : 'Hidden')
+
+                  return (
+                    <div
+                      key={catId}
+                      className="p-4 space-y-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <CategoryThumbIcon
                             type={category.iconType}
                             imageUrl={category.image}
                           />
                           <div className="min-w-0">
-                            <p className="font-medium text-[#111827] leading-snug">
+                            <p className="text-[13px] font-medium text-[#111827] truncate">
                               {category.name}
                             </p>
                             <p className="text-[12px] font-normal text-[#6b7280]">
-                              /{category.slug}
+                              /{category.slug} &bull; {category.type}
                             </p>
                           </div>
                         </div>
-                      </td>
-                      <td className="py-3.5 px-3 text-[12.5px] text-[#4b5563] max-w-[300px]">
-                        <p className="truncate">{category.description}</p>
-                      </td>
-                      <td className="py-3.5 px-3 text-center">
-                        <span className="inline-flex items-center justify-center min-w-[36px] px-2.5 py-0.5 rounded-md bg-[#f3f4f6] text-[13px] font-medium text-[#111827]">
-                          {category.productCount}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-3 font-medium text-[#374151] whitespace-nowrap">
-                        {category.type}
-                      </td>
-                      <td className="py-3.5 px-3 text-center">
                         <StatusBadge
-                          status={category.status}
+                          status={catStatus}
                           onClick={() => requestToggleStatus(category)}
                         />
-                      </td>
-                      <td className="py-3.5 pl-3 pr-5">
-                        <div className="flex items-center justify-end gap-1.5">
+                      </div>
+
+                      <p className="text-[13px] text-[#4b5563] pl-7">
+                        {category.description}
+                      </p>
+
+                      <div className="flex items-center justify-between pt-1 pl-7">
+                        <span className="text-[13px] font-normal text-[#4b5563]">
+                          Products:{' '}
+                          <strong className="font-medium text-[#111827]">
+                            {category.productCount || 0}
+                          </strong>
+                        </span>
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
-                            onClick={() =>
-                              setModalState({ open: true, category })
-                            }
+                            onClick={() => setModalState({ open: true, category })}
                             aria-label={`Edit ${category.name}`}
-                            className="p-1.5 rounded-lg text-[#374151] hover:text-[#111827] hover:bg-[#f3f4f6] transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg text-[#374151] hover:bg-gray-100 cursor-pointer"
                           >
                             <PencilIcon />
                           </button>
@@ -874,165 +968,38 @@ export default function Categories({ globalSearch = '' }) {
                             type="button"
                             onClick={() => requestDeleteCategory(category)}
                             aria-label={`Delete ${category.name}`}
-                            className="p-1.5 rounded-lg text-[#dc1414] hover:text-[#a30b0b] hover:bg-red-50 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg text-[#dc1414] hover:bg-red-50 cursor-pointer"
                           >
                             <TrashIcon />
                           </button>
                         </div>
-                      </td>
-                    </tr>
+                      </div>
+                    </div>
                   )
                 })
               ) : (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="py-12 text-center text-[13px] font-normal text-[#6b7280]"
-                  >
-                    No categories match your current filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Mobile Card View */}
-        <div className="md:hidden divide-y divide-[#eef0f4]">
-          {filteredCategories.length > 0 ? (
-            filteredCategories.map((category) => {
-              const isChecked = selectedIds.includes(category.id)
-              return (
-                <div
-                  key={category.id}
-                  className={[
-                    'p-4 space-y-2.5',
-                    isChecked ? 'bg-red-50/35' : '',
-                  ].join(' ')}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={() => toggleSelectRow(category.id)}
-                        aria-label={`Select ${category.name}`}
-                        className="w-4 h-4 rounded-[3px] border-[#cbd5e1] accent-[#dc1414] cursor-pointer shrink-0"
-                      />
-                      <CategoryThumbIcon
-                            type={category.iconType}
-                            imageUrl={category.image}
-                          />
-                      <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-[#111827] truncate">
-                          {category.name}
-                        </p>
-                        <p className="text-[12px] font-normal text-[#6b7280]">
-                          /{category.slug} &bull; {category.type}
-                        </p>
-                      </div>
-                    </div>
-                    <StatusBadge
-                      status={category.status}
-                      onClick={() => requestToggleStatus(category)}
-                    />
-                  </div>
-
-                  <p className="text-[13px] text-[#4b5563] pl-7">
-                    {category.description}
-                  </p>
-
-                  <div className="flex items-center justify-between pt-1 pl-7">
-                    <span className="text-[13px] font-normal text-[#4b5563]">
-                      Products:{' '}
-                      <strong className="font-medium text-[#111827]">
-                        {category.productCount}
-                      </strong>
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setModalState({ open: true, category })}
-                        aria-label={`Edit ${category.name}`}
-                        className="p-1.5 rounded-lg text-[#374151] hover:bg-gray-100 cursor-pointer"
-                      >
-                        <PencilIcon />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => requestDeleteCategory(category)}
-                        aria-label={`Delete ${category.name}`}
-                        className="p-1.5 rounded-lg text-[#dc1414] hover:bg-red-50 cursor-pointer"
-                      >
-                        <TrashIcon />
-                      </button>
-                    </div>
-                  </div>
+                <div className="py-10 text-center text-[12.5px] text-[#6b7280]">
+                  No categories match your current filters.
                 </div>
-              )
-            })
-          ) : (
-            <div className="py-10 text-center text-[12.5px] text-[#6b7280]">
-              No categories match your current filters.
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
-      {/* Pagination Footer */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-0.5">
-        <p className="text-[13px] font-normal text-[#4b5563]">
-          {filteredCategories.length > 0
-            ? `Showing 1 to ${filteredCategories.length} of ${categories.length} categories`
-            : 'Showing 0 categories'}
-        </p>
-
-        <div className="flex items-center gap-1.5 self-start sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            aria-label="Previous page"
-            className="w-8 h-8 rounded-md border border-[#dce0e8] bg-white text-[#374151] hover:bg-[#f9fafb] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <ChevronLeftIcon />
-          </button>
-
-          {pages.map((page) => {
-            const isActive = currentPage === page
-            return (
-              <button
-                key={page}
-                type="button"
-                onClick={() => setCurrentPage(page)}
-                className={[
-                  'w-8 h-8 rounded-md text-[13px] font-medium flex items-center justify-center border transition-all cursor-pointer',
-                  isActive
-                    ? 'bg-gradient-to-b from-[#e01414] to-[#c40b0b] text-white border-[#c40b0b] shadow-xs'
-                    : 'bg-white border-[#dce0e8] text-[#1f2937] hover:bg-[#f9fafb]',
-                ].join(' ')}
-              >
-                {page}
-              </button>
-            )
-          })}
-
-          <button
-            type="button"
-            onClick={() => setCurrentPage((p) => Math.min(pages.length, p + 1))}
-            disabled={currentPage === pages.length}
-            aria-label="Next page"
-            className="w-8 h-8 rounded-md border border-[#dce0e8] bg-white text-[#374151] hover:bg-[#f9fafb] disabled:opacity-45 disabled:cursor-not-allowed flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <ChevronRightIcon />
-          </button>
-        </div>
-      </div>
+      {/* Fully Dynamic Pagination Footer */}
+      <Pagination
+        currentPage={safePage}
+        totalItems={filteredCategories.length}
+        pageSize={ITEMS_PER_PAGE}
+        onPageChange={setCurrentPage}
+        itemName="categories"
+      />
 
       {/* Add / Edit Category Modal */}
       {modalState.open && (
         <CategoryModal
-          key={modalState.category?.id || 'new'}
+          key={modalState.category?._id || modalState.category?.id || 'new'}
           isOpen={modalState.open}
           editingCategory={modalState.category}
           onClose={() => setModalState({ open: false, category: null })}
